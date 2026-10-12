@@ -1,0 +1,10 @@
+[package]
+name = "volcasm-syro-sys"
+description = "FFI bindings to KORG SYRO for volca sample (vendored SDK)"
+version.workspace = true
+edition.workspace = true
+links = "syro_volcasample"
+
+[build-dependencies]
+bindgen = "0.73.2"
+cc = "1.8.0"

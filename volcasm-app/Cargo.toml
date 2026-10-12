@@ -1,0 +1,10 @@
+[package]
+name = "volcasm-app"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "volcasm"
+path = "src/main.rs"
+
+[dependencies]

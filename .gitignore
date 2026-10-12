@@ -1,0 +1,4 @@
+/target
+tests/fixtures/vosyr/Test1/samples/sample[0-9]*
+tests/fixtures/**/*.png
+EOF

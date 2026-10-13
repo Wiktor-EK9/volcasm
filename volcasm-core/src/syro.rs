@@ -34,6 +34,11 @@ pub enum SyroItem<'a> {
         index: u32,
         data: &'a [u8; PATTERN_SIZE],
     },
+    /// Whole sample memory image (`.alldata` from the SDK). Replaces all
+    /// samples on the device; `all_sample_empty.alldata` erases them.
+    All { data: &'a [u8] },
+    /// Whole sample memory image compressed to `bits` (8-16) bits per sample.
+    AllCompressed { data: &'a [u8], bits: u32 },
 }
 
 /// Error status returned by SYRO.
@@ -133,6 +138,21 @@ impl Entry {
                 quality: 16,
                 fs: 0,
             },
+            SyroItem::All { data } => Self::all(sys::DataType_Sample_All, data, 16)?,
+            SyroItem::AllCompressed { data, bits } => {
+                Self::all(sys::DataType_Sample_AllCompress, data, bits)?
+            }
+        })
+    }
+
+    fn all(data_type: sys::SyroDataType, data: &[u8], quality: u32) -> Result<Self, SyroError> {
+        u32::try_from(data.len()).map_err(|_| SyroError::SampleTooLarge)?;
+        Ok(Self {
+            data_type,
+            bytes: data.to_vec(),
+            number: 0,
+            quality,
+            fs: 0,
         })
     }
 

@@ -158,6 +158,30 @@ fn mixed_stream_matches_sdk_example() {
 }
 
 #[test]
+fn all_data_matches_sdk_example() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../volcasm-syro-sys/vendor/volcasample/alldata/all_sample_empty.alldata");
+    let data = std::fs::read(&path).unwrap();
+    let ours = stream_to_wav(&encode(&[SyroItem::All { data: &data }]).unwrap());
+    let reference = reference_wav("all_empty", &[arg("a", &path)]);
+    assert_same_wav(&ours, &reference);
+}
+
+#[test]
+fn compressed_all_data_matches_sdk_example() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../volcasm-syro-sys/vendor/volcasample/alldata/all_sample_empty.alldata");
+    let data = std::fs::read(&path).unwrap();
+    let item = SyroItem::AllCompressed {
+        data: &data,
+        bits: 16,
+    };
+    let ours = stream_to_wav(&encode(&[item]).unwrap());
+    let reference = reference_wav("all_empty_c16", &[arg("ac16", &path)]);
+    assert_same_wav(&ours, &reference);
+}
+
+#[test]
 fn out_of_range_slot_is_rejected() {
     let err = encode(&[SyroItem::Erase { slot: 100 }]).unwrap_err();
     assert_eq!(err, SyroError::OutOfRangeNumber);

@@ -5,6 +5,8 @@
 //!   s<slot>c<bits>:<file.wav>   compressed sample, bits 8-16
 //!   e<slot>                     erase sample slot
 //!   p<number>:<file>            raw pattern data (2624 B), pattern 1-10
+//!   a:<file.alldata>            whole sample memory (replaces all samples)
+//!   ac<bits>:<file.alldata>     same, compressed (bits 8-16)
 //!
 //! Input samples are not converted (that is stage 4): the WAV must already be
 //! 16-bit mono; its sample rate is passed to SYRO as is.
@@ -29,6 +31,10 @@ enum Spec {
     Pattern {
         index: u32,
         data: Box<[u8; PATTERN_SIZE]>,
+    },
+    All {
+        data: Vec<u8>,
+        bits: Option<u32>,
     },
 }
 
@@ -61,6 +67,11 @@ impl Spec {
                 index: *index,
                 data,
             },
+            Spec::All { data, bits: None } => SyroItem::All { data },
+            Spec::All {
+                data,
+                bits: Some(bits),
+            } => SyroItem::AllCompressed { data, bits: *bits },
         }
     }
 }
@@ -98,6 +109,14 @@ fn parse(arg: &str) -> Result<Spec, Box<dyn Error>> {
                 .map_err(|_| format!("{path}: pattern must be {PATTERN_SIZE} bytes"))?;
             Ok(Spec::Pattern { index, data })
         }
+        ('a', Some(path)) => Ok(Spec::All {
+            data: std::fs::read(path)?,
+            bits: match rest.strip_prefix('c') {
+                Some(bits) => Some(bits.parse()?),
+                None if rest.is_empty() => None,
+                None => return Err(format!("invalid item: {arg}").into()),
+            },
+        }),
         _ => Err(format!("invalid item: {arg}").into()),
     }
 }

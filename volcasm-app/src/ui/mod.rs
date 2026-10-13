@@ -1,5 +1,8 @@
 //! Widgets and panels.
 
+pub mod knob;
+pub mod motion;
+pub mod sequences;
 pub mod slot_panel;
 pub mod slots;
 pub mod style;

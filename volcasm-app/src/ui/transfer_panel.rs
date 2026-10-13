@@ -17,6 +17,8 @@ pub struct Progress {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TransferAction {
     Send,
+    /// Send only the sequence shown in the editor.
+    SendCurrentPattern,
     Cancel,
     RefreshOutputs,
 }
@@ -40,6 +42,22 @@ pub fn show(
         }
         if ui.small_button(style::label("Uncheck all")).clicked() {
             state.checked.clear();
+        }
+    });
+
+    ui.horizontal_wrapped(|ui| {
+        ui.label(style::label("Sequences"));
+        for n in 0..state.project.patterns().len() {
+            let checked = state.checked_patterns.contains(&n);
+            if ui.selectable_label(checked, (n + 1).to_string()).clicked() {
+                state.toggle_checked_pattern(n);
+            }
+        }
+        if ui.small_button(style::label("All")).clicked() {
+            state.checked_patterns = (0..state.project.patterns().len()).collect();
+        }
+        if ui.small_button(style::label("None")).clicked() {
+            state.checked_patterns.clear();
         }
     });
 
@@ -118,6 +136,15 @@ pub fn show(
                 .min_size(egui::vec2(ui.available_width(), 34.0));
             if ui.add_enabled(!targets.is_empty(), button).clicked() {
                 actions.push(TransferAction::Send);
+            }
+            if state.view == crate::state::View::Sequences {
+                let text = style::caps(&format!("send sequence {} only", state.pattern + 1));
+                if ui
+                    .add(egui::Button::new(text).min_size(egui::vec2(ui.available_width(), 26.0)))
+                    .clicked()
+                {
+                    actions.push(TransferAction::SendCurrentPattern);
+                }
             }
         }
         Some(progress) => {

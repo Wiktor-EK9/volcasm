@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use volcasm_core::device::VOLCA_SAMPLE;
 use volcasm_core::memory::MemoryUsage;
+use volcasm_core::pattern::{MotionRow, PARTS, Pattern};
 use volcasm_core::project::{Project, Slot, Target, file};
 use volcasm_core::sample::{Sample, edit};
 
@@ -37,6 +38,25 @@ impl Default for TransferSettings {
     }
 }
 
+/// Main view.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum View {
+    Samples,
+    Sequences,
+}
+
+/// What is shown under a part's steps.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PartView {
+    Steps,
+    Params,
+    Motion,
+}
+
+/// Identifies a pattern edit; consecutive edits with the same key (e.g. one
+/// knob being dragged) form a single undo step.
+pub type EditKey = (&'static str, usize, usize);
+
 /// Everything the UI shows and edits.
 pub struct AppState {
     pub project: Project,
@@ -55,6 +75,20 @@ pub struct AppState {
     pub transfer: TransferSettings,
     /// Previous contents of each slot, newest last (`None` = was empty).
     history: HashMap<usize, Vec<Option<Slot>>>,
+    pub view: View,
+    /// Sequence shown in the editor (0-based).
+    pub pattern: usize,
+    pub part_views: [PartView; PARTS],
+    /// Motion row shown in each part's motion editor.
+    pub motion_rows: [MotionRow; PARTS],
+    /// Sequences checked for transfer (0-based).
+    pub checked_patterns: BTreeSet<usize>,
+    pub clipboard: Option<Pattern>,
+    /// Previous versions of each pattern, newest last.
+    pattern_history: HashMap<usize, Vec<Pattern>>,
+    last_edit: Option<(usize, EditKey)>,
+    /// Part to scroll into view in the sequence editor, once.
+    pub scroll_to_part: Option<usize>,
 }
 
 impl Default for AppState {
@@ -75,6 +109,15 @@ impl AppState {
             pitch: 0,
             transfer: TransferSettings::default(),
             history: HashMap::new(),
+            view: View::Samples,
+            pattern: 0,
+            part_views: [PartView::Steps; PARTS],
+            motion_rows: [MotionRow::LevelStart; PARTS],
+            checked_patterns: BTreeSet::new(),
+            clipboard: None,
+            pattern_history: HashMap::new(),
+            last_edit: None,
+            scroll_to_part: None,
         }
     }
 
@@ -252,21 +295,148 @@ impl AppState {
         self.set_sample(slot, name, sample)
     }
 
-    /// What a transfer of the checked slots sends: filled slots as samples,
-    /// empty ones erased if `erase_empty` is set.
-    pub fn transfer_targets(&self) -> Vec<Target> {
-        self.checked
+    /// The sequence shown in the editor.
+    pub fn current_pattern(&self) -> &Pattern {
+        self.project
+            .pattern(self.pattern)
+            .expect("current pattern is in range")
+    }
+
+    /// Changes the current sequence through `edit`. Edits with the same
+    /// `key` in a row share one undo step.
+    pub fn edit_pattern(&mut self, key: EditKey, edit: impl FnOnce(&mut Pattern)) {
+        let n = self.pattern;
+        let before = *self.current_pattern();
+        let mut after = before;
+        edit(&mut after);
+        if after == before {
+            return;
+        }
+        if self.last_edit != Some((n, key)) {
+            let steps = self.pattern_history.entry(n).or_default();
+            steps.push(before);
+            if steps.len() > UNDO_DEPTH {
+                steps.remove(0);
+            }
+            self.last_edit = Some((n, key));
+        }
+        *self
+            .project
+            .pattern_mut(n)
+            .expect("current pattern is in range") = after;
+        self.dirty = true;
+    }
+
+    /// Starts a new undo step for the next pattern edit (a new click or
+    /// drag gesture).
+    pub fn end_edit(&mut self) {
+        self.last_edit = None;
+    }
+
+    /// Opens or closes a part's knobs or motion editor. The motion editor
+    /// opens on the first row that has data.
+    pub fn toggle_part_view(&mut self, part: usize, view: PartView) {
+        let open = self.part_views[part] == view;
+        self.part_views[part] = if open { PartView::Steps } else { view };
+        if !open && view == PartView::Motion {
+            let data = self.current_pattern().part(part);
+            let has_data = |row: MotionRow| (1..=16).any(|step| data.raw_motion(row, step) != 0);
+            if !has_data(self.motion_rows[part])
+                && let Some(row) = crate::ui::motion::ROWS
+                    .iter()
+                    .map(|(r, _)| *r)
+                    .find(|r| has_data(*r))
+            {
+                self.motion_rows[part] = row;
+            }
+        }
+    }
+
+    pub fn can_undo_pattern(&self) -> bool {
+        self.pattern_history
+            .get(&self.pattern)
+            .is_some_and(|steps| !steps.is_empty())
+    }
+
+    /// Restores the previous version of the current sequence.
+    pub fn undo_pattern(&mut self) -> bool {
+        let n = self.pattern;
+        let Some(previous) = self.pattern_history.get_mut(&n).and_then(Vec::pop) else {
+            return false;
+        };
+        *self
+            .project
+            .pattern_mut(n)
+            .expect("current pattern is in range") = previous;
+        self.last_edit = None;
+        self.dirty = true;
+        true
+    }
+
+    pub fn select_pattern(&mut self, n: usize) {
+        if n < self.project.patterns().len() {
+            self.pattern = n;
+            self.last_edit = None;
+        }
+    }
+
+    pub fn copy_pattern(&mut self) {
+        self.clipboard = Some(*self.current_pattern());
+    }
+
+    pub fn paste_pattern(&mut self) {
+        if let Some(pattern) = self.clipboard {
+            self.edit_pattern(("paste", 0, 0), |p| *p = pattern);
+            self.last_edit = None;
+        }
+    }
+
+    pub fn clear_pattern(&mut self) {
+        self.edit_pattern(("clear", 0, 0), |p| *p = Pattern::default());
+        self.last_edit = None;
+    }
+
+    pub fn toggle_checked_pattern(&mut self, n: usize) {
+        if !self.checked_patterns.remove(&n) {
+            self.checked_patterns.insert(n);
+        }
+    }
+
+    /// Problems of the current sequence for display: device issues plus
+    /// parts with steps that play an empty slot.
+    pub fn pattern_warnings(&self) -> Vec<String> {
+        let pattern = self.current_pattern();
+        let mut out: Vec<String> = pattern
+            .issues(self.project.device().sample_slots)
             .iter()
-            .filter_map(|&n| {
-                if self.project.slot(n).is_some() {
-                    Some(Target::Sample(n))
-                } else if self.transfer.erase_empty {
-                    Some(Target::Erase(n))
-                } else {
-                    None
-                }
-            })
-            .collect()
+            .map(ToString::to_string)
+            .collect();
+        for (i, part) in pattern.parts().enumerate() {
+            let slot = usize::from(part.sample());
+            if part.steps() != 0 && slot < self.slot_count() && self.project.slot(slot).is_none() {
+                out.push(format!(
+                    "part {}: slot {slot} is empty in this project",
+                    i + 1
+                ));
+            }
+        }
+        out
+    }
+
+    /// What a transfer sends: checked slots (filled ones as samples, empty
+    /// ones erased if `erase_empty` is set), then checked sequences.
+    pub fn transfer_targets(&self) -> Vec<Target> {
+        let samples = self.checked.iter().filter_map(|&n| {
+            if self.project.slot(n).is_some() {
+                Some(Target::Sample(n))
+            } else if self.transfer.erase_empty {
+                Some(Target::Erase(n))
+            } else {
+                None
+            }
+        });
+        let patterns = self.checked_patterns.iter().map(|&n| Target::Pattern(n));
+        samples.chain(patterns).collect()
     }
 
     /// Window title: project name, file and unsaved marker.
@@ -387,6 +557,82 @@ mod tests {
     }
 
     #[test]
+    fn pattern_edits_and_undo() {
+        use volcasm_core::pattern::{Func, Param};
+        let mut s = AppState::default();
+        s.select_pattern(3);
+        let original = *s.current_pattern();
+        s.edit_pattern(("step", 0, 1), |p| p.part_mut(0).set_step(1, true));
+        // Dragging one knob: several edits, one undo step.
+        for v in [10, 20, 30] {
+            s.edit_pattern(("param", 2, Param::Pan as usize), |p| {
+                p.part_mut(2).set_param(Param::Pan, v).unwrap()
+            });
+        }
+        s.edit_pattern(("func", 4, 0), |p| {
+            p.part_mut(4).set_func(Func::Reverb, true)
+        });
+        assert!(s.dirty);
+        let edited = *s.current_pattern();
+        assert_eq!(edited.part(2).param(Param::Pan), 30);
+
+        // Only the edited bytes changed.
+        let (a, b) = (original.to_bytes(), edited.to_bytes());
+        let changed: Vec<usize> = (0..a.len()).filter(|&i| a[i] != b[i]).collect();
+        let part = |p: usize, off: usize| 32 + 256 * p + off;
+        assert_eq!(changed, [part(0, 2), part(2, 10), part(4, 20)]);
+
+        assert!(s.undo_pattern());
+        assert!(!s.current_pattern().part(4).func(Func::Reverb));
+        assert!(s.undo_pattern());
+        assert_eq!(s.current_pattern().part(2).param(Param::Pan), 0);
+        assert!(s.undo_pattern());
+        assert_eq!(*s.current_pattern(), original);
+        assert!(!s.undo_pattern());
+        // Other sequences untouched.
+        assert_eq!(*s.project.pattern(0).unwrap(), Pattern::default());
+    }
+
+    #[test]
+    fn motion_editor_opens_on_used_row() {
+        let path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/fixtures/vosyr/Test2/Test2.vsj");
+        let (mut s, _) = AppState::import_vsj(&path).unwrap();
+        s.toggle_part_view(7, PartView::Motion);
+        assert_eq!(s.part_views[7], PartView::Motion);
+        assert_eq!(s.motion_rows[7], MotionRow::AmpEgAttack);
+        s.toggle_part_view(7, PartView::Motion);
+        assert_eq!(s.part_views[7], PartView::Steps);
+    }
+
+    #[test]
+    fn copy_paste_clear() {
+        let mut s = AppState::default();
+        s.edit_pattern(("step", 0, 1), |p| p.part_mut(0).set_steps(0x00ff));
+        s.copy_pattern();
+        s.select_pattern(5);
+        s.paste_pattern();
+        assert_eq!(s.current_pattern().part(0).steps(), 0x00ff);
+        s.clear_pattern();
+        assert_eq!(*s.current_pattern(), Pattern::default());
+        assert!(s.undo_pattern());
+        assert_eq!(s.current_pattern().part(0).steps(), 0x00ff);
+    }
+
+    #[test]
+    fn warnings_mention_empty_slots() {
+        let mut s = AppState::default();
+        s.edit_pattern(("x", 0, 0), |p| {
+            p.part_mut(1).set_sample(7);
+            p.part_mut(1).set_steps(1);
+        });
+        assert_eq!(
+            s.pattern_warnings(),
+            ["part 2: slot 7 is empty in this project"]
+        );
+    }
+
+    #[test]
     fn transfer_targets() {
         let mut s = AppState::default();
         s.set_sample(0, "a".into(), sample(&[1])).unwrap();
@@ -400,6 +646,12 @@ mod tests {
         assert_eq!(s.transfer_targets(), [Target::Sample(0), Target::Sample(9)]);
         s.toggle_checked(0);
         assert_eq!(s.transfer_targets(), [Target::Sample(9)]);
+        s.toggle_checked_pattern(4);
+        s.toggle_checked_pattern(0);
+        assert_eq!(
+            s.transfer_targets(),
+            [Target::Sample(9), Target::Pattern(0), Target::Pattern(4)]
+        );
     }
 
     #[test]

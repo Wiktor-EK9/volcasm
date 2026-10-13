@@ -9,8 +9,10 @@ use std::process::ExitCode;
 
 use app::{Options, VolcasmApp};
 use eframe::egui;
+use state::PartView;
 
 const USAGE: &str = "usage: volcasm [project.volcasm | project.vsj] [--select <slot>] \
+                     [--sequences] [--pattern <1-10>] [--params <part>] [--motion <part>] \
                      [--size <width>x<height>] [--screenshot <out.png>]";
 
 fn parse_args() -> Result<(Options, Option<egui::Vec2>), String> {
@@ -27,6 +29,24 @@ fn parse_args() -> Result<(Options, Option<egui::Vec2>), String> {
                 options.select = Some(value()?.parse().map_err(|_| "invalid slot".to_string())?)
             }
             "--screenshot" => options.screenshot = Some(PathBuf::from(value()?)),
+            "--sequences" => options.sequences = true,
+            "--pattern" => {
+                let n: usize = value()?
+                    .parse()
+                    .map_err(|_| "invalid pattern".to_string())?;
+                options.pattern = Some(n.checked_sub(1).ok_or("patterns are 1-10")?);
+            }
+            "--params" | "--motion" => {
+                let n: usize = value()?.parse().map_err(|_| "invalid part".to_string())?;
+                let view = if arg == "--params" {
+                    PartView::Params
+                } else {
+                    PartView::Motion
+                };
+                options
+                    .expand
+                    .push((n.checked_sub(1).ok_or("parts are 1-10")?, view));
+            }
             "--size" => {
                 let v = value()?;
                 let (w, h) = v.split_once('x').ok_or("size is <width>x<height>")?;

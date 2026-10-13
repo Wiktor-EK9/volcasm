@@ -10,11 +10,13 @@ use volcasm_audio::{OutputInfo, Phase, Preview, Transfer, TransferOptions};
 use volcasm_core::sample::{Sample, import};
 use volcasm_core::syro::{STREAM_SAMPLE_RATE, encode};
 
-use crate::state::{AppState, name_from_path};
+use crate::state::{AppState, PartView, View, name_from_path};
+use crate::ui::sequences;
 use crate::ui::slot_panel::{self, NameEdit, PanelAction};
 use crate::ui::slots::{self, SlotAction};
 use crate::ui::style;
 use crate::ui::transfer_panel::{self, Progress, TransferAction};
+use volcasm_core::project::Target;
 
 /// Audio file extensions offered when loading a sample.
 const AUDIO_EXTENSIONS: [&str; 7] = ["wav", "aif", "aiff", "flac", "mp3", "ogg", "oga"];
@@ -28,6 +30,12 @@ pub struct Options {
     pub select: Option<usize>,
     /// Save a screenshot of the window to this file and quit (verification).
     pub screenshot: Option<PathBuf>,
+    /// Start in the sequence editor.
+    pub sequences: bool,
+    /// Sequence to show (0-based).
+    pub pattern: Option<usize>,
+    /// Parts (0-based) to show with knobs or the motion editor.
+    pub expand: Vec<(usize, PartView)>,
 }
 
 /// An action that discards unsaved changes, waiting for confirmation.
@@ -100,6 +108,18 @@ impl VolcasmApp {
         }
         if let Some(slot) = options.select {
             app.state.select(slot);
+        }
+        if options.sequences {
+            app.state.view = View::Sequences;
+        }
+        if let Some(n) = options.pattern {
+            app.state.select_pattern(n);
+        }
+        for (part, view) in options.expand {
+            if part < app.state.part_views.len() {
+                app.state.toggle_part_view(part, view);
+            }
+            app.state.scroll_to_part.get_or_insert(part);
         }
         app
     }
@@ -262,8 +282,7 @@ impl VolcasmApp {
         }
     }
 
-    fn start_transfer(&mut self) {
-        let targets = self.state.transfer_targets();
+    fn start_transfer(&mut self, targets: Vec<Target>) {
         if targets.is_empty() {
             return;
         }
@@ -401,6 +420,13 @@ impl VolcasmApp {
     fn top_bar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label(style::brand("volcasm", 30.0).color(style::ACCENT));
+            ui.add_space(12.0);
+            for (view, name) in [(View::Samples, "samples"), (View::Sequences, "sequences")] {
+                let text = egui::RichText::new(style::caps(name)).size(18.0);
+                if ui.selectable_label(self.state.view == view, text).clicked() {
+                    self.state.view = view;
+                }
+            }
             ui.add_space(12.0);
             if ui.button(style::label("New")).clicked() {
                 self.discard_then(Discarding::New);
@@ -596,7 +622,11 @@ impl eframe::App for VolcasmApp {
             .default_size(380.0)
             .show(ui, |ui| {
                 ui.add_space(6.0);
-                let actions = slot_panel::show(ui, &mut self.state, &mut self.name_edit);
+                let actions = if self.state.view == View::Samples {
+                    slot_panel::show(ui, &mut self.state, &mut self.name_edit)
+                } else {
+                    Vec::new()
+                };
                 for action in actions {
                     match action {
                         PanelAction::LoadFile(slot) => self.pick_sample(slot),
@@ -643,7 +673,10 @@ impl eframe::App for VolcasmApp {
                 );
                 for action in actions {
                     match action {
-                        TransferAction::Send => self.start_transfer(),
+                        TransferAction::Send => self.start_transfer(self.state.transfer_targets()),
+                        TransferAction::SendCurrentPattern => {
+                            self.start_transfer(vec![Target::Pattern(self.state.pattern)])
+                        }
                         TransferAction::Cancel => {
                             if let Some(TransferJob::Running { transfer, .. }) = &self.transfer {
                                 transfer.cancel();
@@ -654,6 +687,10 @@ impl eframe::App for VolcasmApp {
                 }
             });
         egui::CentralPanel::default().show(ui, |ui| {
+            if self.state.view == View::Sequences {
+                sequences::show(ui, &mut self.state);
+                return;
+            }
             egui::ScrollArea::vertical().show(ui, |ui| {
                 let playing = self.preview.as_ref().map(|(n, _)| *n);
                 for action in slots::show(ui, &self.state, playing) {

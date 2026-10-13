@@ -8,8 +8,9 @@ use crate::{Error, VosyrProject};
 
 impl VosyrProject {
     /// Builds a Volcasm project: slot names and samples, the ten sequences
-    /// unchanged. Slots whose sample cannot be loaded stay empty; the errors
-    /// are returned alongside.
+    /// unchanged, tempo, swing and reverb. Slots whose sample cannot be
+    /// loaded stay empty, and unreadable settings keep their defaults; the
+    /// errors are returned alongside.
     pub fn to_project(&self) -> (Project, Vec<Error>) {
         let mut project = Project::new(&VOLCA_SAMPLE, self.name.clone());
         let mut errors = Vec::new();
@@ -32,6 +33,15 @@ impl VosyrProject {
             if let Err(err) = slot {
                 errors.push(err);
             }
+        }
+        match self.settings() {
+            Ok(settings) => {
+                let range = volcasm_core::project::TEMPO_RANGE;
+                project.tempo = u16::from(settings.tempo).clamp(*range.start(), *range.end());
+                project.swing = Some(settings.swing);
+                project.reverb = Some(settings.reverb);
+            }
+            Err(err) => errors.push(err),
         }
         for (i, data) in self.sequences.iter().enumerate() {
             let pattern = Pattern::from_bytes(&pattern::to_bytes(data))

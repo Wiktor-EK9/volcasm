@@ -23,6 +23,8 @@ fn project() -> Project {
     p.license = Some("CC0-1.0".into());
     p.description = Some("Zażółć gęślą jaźń".into());
     p.tempo = 97;
+    p.swing = Some(63);
+    p.reverb = Some(94);
     for (slot, seed, frames) in [(0, 3, 1000), (5, -7, 1), (99, 11, 40_000)] {
         p.set_slot(
             slot,
@@ -85,6 +87,8 @@ fn manifest_is_readable_json() {
     assert_eq!(manifest["slots"][2]["file"], "samples/99.wav");
     assert_eq!(manifest["patterns"][9]["file"], "patterns/10.bin");
     assert_eq!(manifest["tempo"], 97);
+    assert_eq!(manifest["swing"], 63);
+    assert_eq!(manifest["reverb"], 94);
 }
 
 /// Builds an archive from `members` (name, content).

@@ -214,94 +214,81 @@ zgodne z trzema pomiarami i etykietą "LEVEL START/END" w UI Vosyra:
 
 Wiersze 0, 6, 13 zmierzone w Vosyrze, wszystkie 14 nazwane w `volcasample_pattern.h`.
 
-## 5. `Test1.vsj` (plik projektu)
+## 5. Plik `.vsj` (ustawienia projektu)
 
-Nagłówek `PRST` @0, u32 @4 = 4854 i u32 @8 = 251 są identyczne we wszystkich
-projektach (Test1, Test2, B1..B8r): prawdopodobnie stałe/wersja. **NIEZNANE.**
+Układ rozpoznany na 25 projektach (`Test1`, `Test2`, `B1`..`B8r`,
+`C1`..`C14`, 2026-10-13). W każdym z nich każdy bajt należy do pola z
+tabeli, a pozostałe są zerami. **POTWIERDZONE** (układ i wartości tempa,
+swingu, reverbu); znaczenie pól UI to **HIPOTEZA**.
 
-### Ustalone (testy B1..B5, **POTWIERDZONE**)
+```
+offset  rozmiar  pole
+0       4        "PRST"
+4       4        u32 4854, we wszystkich plikach               NIEZNANE (stała/wersja)
+8       4        u32 251, we wszystkich plikach                NIEZNANE
+12      100      bajt na (sekwencja, część): 12 + 10*s + p     HIPOTEZA: stan UI
+112     zmienny  100 napisów ASCII zakończonych NUL, w tej
+                 samej kolejności (s, p); pusty = sam NUL       HIPOTEZA: stan UI
+t       1        sekwencja widoczna przy zapisie (0 = S1)       HIPOTEZA (mocna)
+t+1     10       0x7f we wszystkich plikach                     NIEZNANE
+t+11    1        tempo (BPM)                                    POTWIERDZONE
+t+612   1        swing                                          POTWIERDZONE
+t+613   1        reverb                                         POTWIERDZONE
+t+714   100      0x40 we wszystkich plikach                     NIEZNANE
+```
 
-W projektach bez dodatkowej zawartości sekwencji (B1..B5, Test1):
+`t` = koniec bloku napisów. Gdy wszystkie są puste, `t` = 212, więc tempo
+jest @223, swing @824, reverb @825. To wyjaśnia wcześniejszą obserwację
+„przesuniętego ogona”: w `Test2` napisy `"0|1"`, `"13"`, `"0|1"` zajmują
+o 8 bajtów więcej, w `C4`/`C5` napis `"0|1"` o 3.
 
-| offset | rozmiar | pole | dowód |
-|---|---|---|---|
-| 223 | u8 | **tempo (BPM)** | B1 = 125, B2 = 97, B5 = 140 |
-| 824 | u8 | **swing** | B3 = 63, Test1 = 14, B1 = 0 |
-| 825 | u8 | **reverb** | B4 = 94, Test1 = 45, B1 = 0 |
-| 213-222 | 10 x 0x7f | stałe w B1 (znaczenie nieznane, tuż przed tempem) | NIEZNANE |
-| 926-1025 | 100 x 0x40 | tablica 100 wartości, domyślnie 64 (np. ustawienie per slot) | HIPOTEZA |
+Zakresy (testy C9..C14, autor, Vosyr na Windows):
+- tempo 56..240 BPM (`C13` = 56, `C14` = 240), jeden bajt, kolejny bajt
+  zawsze 0;
+- swing 0..75 (`C9` = 0, `C10` = 75), UI nie pokazuje liczby;
+- reverb 0..127 (`C11` = 0, `C12` = 127), UI nie pokazuje liczby.
 
-Tempo jest **jedno globalne**, nie per sekwencja (B5: zmiana tempa nie
-dotyka żadnego pliku sekwencji). Swing i reverb to także ustawienia globalne
-(zmieniają tylko `.vsj`, sekwencje bez zmian). Wartości swing/reverb zapisane
-jako 63 i 94, UI Vosyra nie pokazuje liczb przy tych pokrętłach. Zakres
-0-127 to **HIPOTEZA** (pokrętło wypełnia się proporcjonalnie, 94 ≈ 3/4 skali).
-Uwaga: w `B5` pole reverb nadal ma 94, bo projekt powstał po `B4`.
+Pola UI (HIPOTEZY, nieużywane przy imporcie):
+- bajt (s, p) @12: `C1` i `C2` (kroki w S1 P1) ustawiają @12 = 1; `C3`
+  (włączony MOTION), `C7` (ACTIVE STEP) i `C8` (numer sampla) nie zmieniają
+  `.vsj`. W `Test1` flagi stoją przy S1 P2-P5, P7, P10 i S4 P1-P7, P9, P10.
+  Znaczenie niejasne (nie „część ma kroki”); prawdopodobnie stan widoku.
+- napis (s, p): pojawia się po edycji motion w części: `"0|1"` dla LEVEL
+  (wiersze start/end = 0 i 1), `"13"` dla HI CUT (wiersz 13). W `C5` dwie
+  wartości LEVEL dają ten sam napis co jedna w `C4`, a `C6` (S2) zapisuje
+  go w pozycji S2 P7. Wygląda na wybór wierszy w edytorze motion Vosyra.
+- bajt `t`: `C6` (zapis na S2) = 1, `Test1` (ostatni zrzut na S4) = 3.
 
-Sample nie wpływają na `.vsj`: `B6`, `B7`, `B7r`, `B8`, `B8r` mają plik
-`.vsj` identyczny z `B1` (zero różnic).
+Sample nie wpływają na `.vsj` (`B6`..`B8r`, `C8`). Tempo jest jedno,
+globalne (`B5`).
 
-### Nierozstrzygnięte: układ zmienny (NIEZNANE)
-
-**Offsety powyżej nie są stałe.** W `Test2` cały ogon pliku jest przesunięty o
-**+8 bajtów**: 10 x 0x7f jest @221-230, tempo @231, tablica 100 x 0x40
-@934-1033. Dlatego loader **nie może** czytać `.vsj` ze stałych offsetów, dopóki
-nie ustalimy struktury.
-
-Dodatkowe obserwacje:
-- `Test2` (sekwencje z motion, P9 z samplem 24 i skrajnymi wartościami,
-  flagi części): w obszarze przed 213 pojawiają się teksty ASCII `"0|1"`
-  @118-120, bajty `"13"` @122-123 i `"0|1"` @143-145. Pozostałe bajty zero.
-- `Test1` (25 sampli, wzorce na S1 i S4, ACTIVE STEP 13 wyłączony): 15 flag
-  `01` @13-16, 18, 21, 42-48, 50, 51 oraz `03` @212. Tempo @223 bez
-  przesunięcia.
-- Pusty `B1` nie ma żadnej z tych zawartości.
-
-Nie wiadomo, która funkcja (motion, numer sampla w części, wzorce, ACTIVE
-STEP, flagi) odpowiada za które pola. W `Test2`/`Test1` zmieniono wiele rzeczy
-naraz, więc atrybucja jest niemożliwa. Potrzebne testy jednofunkcyjne
-(sekcja 6).
-
-Nie znaleziono znacznika końca (w przeciwieństwie do `SMED` i `PTED`).
+Import (`volcasm-vosyr-import`, `settings.rs`) czyta wyłącznie tempo, swing
+i reverb, idąc po napisach. Jeśli układ się nie zgadza (napis dłuższy niż
+64 znaki, nie-ASCII, brak NUL, za krótki plik), zgłasza błąd zamiast
+zgadywać, a sample i sekwencje importują się dalej.
 
 ## 6. Testy kontrolowane
 
 **Wykonane:** pusty projekt, tempo, swing, reverb, sample w slocie 0 i 5,
 zmiana nazwy, dodanie i usunięcie sampla (`Test3`), flagi części, ACTIVE
-STEP, motion w kilku miejscach (`Test2`).
+STEP, motion w kilku miejscach (`Test2`), seria `Test4` (`C1`..`C14`,
+opis w `Test4/Zmiany.txt`): kroki, MOTION bez danych, motion w S1 i S2,
+ACTIVE STEP, numer sampla, skrajne wartości swing, reverb i tempa.
 
-**Do wykonania (każdy z pustego projektu `B1`, jedna zmiana na zapis):**
+Wyniki `Test4` dla sekwencji, **POTWIERDZONE**: `C1`/`C2` StepOn S1 P1 =
+`0x0001` / `0x0011`; `C3` FuncMemoryPart P1 = `0x11`; `C4` Motion LEVEL
+krok 9 P7 = 196 (68 + 128) przy MOTION wyłączonym; `C5` dodatkowo krok 10 =
+199 (71); `C6` to samo w S2; `C7` ActiveStep = `0xfffe`; `C8` SampleNum P1
+= 5. Uwaga z `Zmiany.txt`: w Vosyrze nie da się ustawić motion dokładnie na
+69/70, stąd 68 i 71.
 
-Cel A: ustalić, co zmienia układ `.vsj` (flagi w Test1, teksty i przesunięcie
-w Test2):
-1. Tylko numer sampla w P1 = slot z istniejącym samplem (np. 0).
-2. Tylko numer sampla w P1 = pusty slot (np. 24).
-3. Tylko włączony MOTION na P1 (bez danych).
-4. Tylko dane motion: LEVEL 69 na kroku 9 w P7, MOTION wyłączony.
-5. Tylko włączony jeden krok wzorca (P1, krok 1).
-6. Tylko ACTIVE STEP 1 wyłączony w S1.
-7. Tylko START POINT 5 w P6. (Rozbieżność z `Test2` rozstrzygnięta: plik
-   ma w P6 START POINT = `0x85`, SPEED domyślny, więc "SPEED +5" w
-   `Test2.txt` to pomyłka opisu.)
-
-Cel B: dokończyć dekodowanie sekwencji:
-8. Jeden projekt, jedna część (np. P1) z motion na wszystkich 14 polach
-   (LEVEL start/end, PAN start/end, SPEED start/end, AMP ATK, AMP DEC,
-   PITCH INT, PITCH ATK, PITCH DEC, START, LENGTH, HI CUT), każde w innym
-   kroku 1-14. Zapisz listę "pole -> krok". Wiersze są już potwierdzone
-   przez SDK, test tylko dla pewności, że Vosyr zapisuje je tak samo.
-9. SPEED w trybie półtonów (przełącznik przy etykiecie SPEED): P1 = +5,
-   P2 = −5. Sprzęt już potwierdził kodowanie (`64 + półtony`); test sprawdzi,
-   czy Vosyr zapisuje tak samo.
-10. Wzorzec z włączoną akcentem, jeśli Vosyr ma Accent.
-
-Cel C: zakresy ustawień globalnych:
-11. Swing na minimum, potem na maksimum (osobne zapisy).
-12. Reverb na minimum, potem na maksimum.
-13. Tempo na minimum i maksimum, jakie pozwala ustawić Vosyr.
-
-Wskazówka: do każdego zapisu dołącz krótką listę tego, co ustawiono, i
-zrzut ekranu, jak dotąd. Zrzuty pozwalają zweryfikować dekodowanie.
+**Do wykonania (opcjonalnie):**
+- Motion na wszystkich 14 polach jednej części, każde w innym kroku
+  (sprawdzenie, czy Vosyr zapisuje wiersze tak jak SDK, w tym kodowanie
+  SPEED w motion, D19).
+- SPEED w trybie półtonów: P1 = +5, P2 = −5 (czy Vosyr zapisuje
+  `64 + półtony` jak sprzęt).
+- Znaczenie bajtów UI (sekcja 5), jeśli kiedyś okaże się potrzebne.
 
 ## 7. Zasady dla fixtures w repo
 

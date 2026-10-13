@@ -39,6 +39,11 @@ struct Manifest {
     /// Preview tempo in BPM; optional, added after version 1 was defined.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     tempo: Option<u16>,
+    /// Swing and reverb on Vosyr's scales, kept from imports; optional.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    swing: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    reverb: Option<u8>,
     slots: Vec<SlotEntry>,
     patterns: Vec<PatternEntry>,
 }
@@ -140,6 +145,8 @@ pub fn write(project: &Project, writer: impl Write + Seek) -> Result<(), FileErr
         license: project.license.clone(),
         description: project.description.clone(),
         tempo: Some(project.tempo),
+        swing: project.swing,
+        reverb: project.reverb,
         slots: project
             .slots()
             .map(|(slot, s)| SlotEntry {
@@ -200,6 +207,8 @@ pub fn read(reader: impl Read + Seek) -> Result<Project, FileError> {
     project.author = manifest.author;
     project.license = manifest.license;
     project.description = manifest.description;
+    project.swing = manifest.swing;
+    project.reverb = manifest.reverb;
     if let Some(tempo) = manifest.tempo {
         project.tempo = tempo.clamp(*super::TEMPO_RANGE.start(), *super::TEMPO_RANGE.end());
     }

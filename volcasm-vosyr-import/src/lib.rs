@@ -3,12 +3,14 @@
 //! A project is a directory: `<name>.vsj`, `samples/samples` (slot index),
 //! `samples/sample<number>` (WAV files) and `sequences/sequence01..10` (raw
 //! SDK pattern structures). Only fields confirmed in `docs/vsj-format.md`
-//! are interpreted; everything else is kept byte for byte. The `.vsj` file
-//! itself has a variable layout and is kept raw (stage 11).
+//! are interpreted; everything else is kept byte for byte. From the `.vsj`
+//! file only the global settings are read ([`settings`]); the file is kept
+//! raw.
 
 pub mod convert;
 pub mod index;
 pub mod project;
+pub mod settings;
 
 use std::fmt;
 use std::path::PathBuf;
@@ -17,6 +19,7 @@ use volcasm_core::pattern::PatternError;
 
 pub use index::{SampleIndex, SlotRecord};
 pub use project::{SEQUENCE_COUNT, VSJ_SIZE, VosyrProject, load};
+pub use settings::GlobalSettings;
 
 /// Error while loading a Vosyr project.
 #[derive(Debug)]
@@ -43,6 +46,8 @@ pub enum Error {
     SlotOutOfRange(usize),
     /// The slot holds no sample.
     SlotEmpty(usize),
+    /// The `.vsj` file does not follow the known layout.
+    Layout(String),
     /// The sample file cannot be read or is not in the device format.
     Sample {
         slot: usize,
@@ -70,6 +75,7 @@ impl fmt::Display for Error {
                 String::from_utf8_lossy(expected)
             ),
             Self::Pattern { file, source } => write!(f, "{file}: {source}"),
+            Self::Layout(message) => write!(f, "unrecognized .vsj layout: {message}"),
             Self::SlotOutOfRange(slot) => write!(f, "slot {slot} out of range 0-99"),
             Self::SlotEmpty(slot) => write!(f, "slot {slot} is empty"),
             Self::Sample {

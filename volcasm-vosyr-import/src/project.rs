@@ -25,8 +25,7 @@ pub struct VosyrProject {
     pub dir: PathBuf,
     /// Project name (`.vsj` file stem).
     pub name: String,
-    /// The `.vsj` file as read. Its layout varies with the project content
-    /// and is not parsed yet (`docs/vsj-format.md`, section 5).
+    /// The `.vsj` file as read (`docs/vsj-format.md`, section 5).
     pub vsj: Vec<u8>,
     pub index: SampleIndex,
     /// Sequences 1-10 (`sequence01..10`), validated SDK pattern structures.
@@ -69,6 +68,11 @@ pub fn load(vsj_path: &Path) -> Result<VosyrProject, Error> {
 }
 
 impl VosyrProject {
+    /// Tempo, swing and reverb from the `.vsj` file.
+    pub fn settings(&self) -> Result<crate::GlobalSettings, Error> {
+        crate::settings::parse(&self.vsj)
+    }
+
     /// Raw bytes of sequence `n` (1-10), identical to the file.
     pub fn sequence_bytes(&self, n: usize) -> [u8; PATTERN_SIZE] {
         pattern::to_bytes(&self.sequences[n - 1])

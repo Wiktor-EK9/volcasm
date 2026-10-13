@@ -75,6 +75,11 @@ pub struct Project {
     pub description: Option<String>,
     /// Tempo for the preview, in BPM. Not sent to the device.
     pub tempo: u16,
+    /// Swing as stored by Vosyr (0-75), kept from imports; not used yet.
+    pub swing: Option<u8>,
+    /// Reverb level as stored by Vosyr (0-127), kept from imports; not
+    /// used yet.
+    pub reverb: Option<u8>,
     slots: Vec<Option<Slot>>,
     patterns: Vec<Pattern>,
 }
@@ -89,6 +94,8 @@ impl Project {
             license: None,
             description: None,
             tempo: DEFAULT_TEMPO,
+            swing: None,
+            reverb: None,
             slots: vec![None; device.sample_slots as usize],
             patterns: vec![Pattern::default(); device.patterns as usize],
         }

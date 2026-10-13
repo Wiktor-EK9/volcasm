@@ -371,3 +371,100 @@ mod convert {
         assert_ne!(*p.pattern(0).unwrap(), Pattern::default());
     }
 }
+
+mod settings {
+    use volcasm_core::pattern::MotionRow;
+
+    use super::*;
+
+    /// (project, tempo, swing, reverb, shown sequence) from the test notes
+    /// (`Testy B.txt`, `Test4/Zmiany.txt`) and screenshots.
+    const EXPECTED: [(&str, u8, u8, u8, u8); 25] = [
+        ("Test1/Test1.vsj", 125, 14, 45, 3),
+        ("Test2/Test2.vsj", 125, 0, 0, 0),
+        ("Test3/B1/B1.vsj", 125, 0, 0, 0),
+        ("Test3/B2/B2.vsj", 97, 0, 0, 0),
+        ("Test3/B3/B3.vsj", 97, 63, 0, 0),
+        ("Test3/B4/B4.vsj", 97, 0, 94, 0),
+        ("Test3/B5/B5.vsj", 140, 0, 94, 0),
+        ("Test3/B6/B6.vsj", 125, 0, 0, 0),
+        ("Test3/B7/B7.vsj", 125, 0, 0, 0),
+        ("Test3/B7r/B7r.vsj", 125, 0, 0, 0),
+        ("Test3/B8/B8.vsj", 125, 0, 0, 0),
+        ("Test3/B8r/B8r.vsj", 125, 0, 0, 0),
+        ("Test4/C1vsj/C1vsj.vsj", 125, 0, 0, 0),
+        ("Test4/C2vsj/C2vsj.vsj", 125, 0, 0, 0),
+        ("Test4/C3vsj/C3vsj.vsj", 125, 0, 0, 0),
+        ("Test4/C4vsj/C4vsj.vsj", 125, 0, 0, 0),
+        ("Test4/C5vsj/C5vsj.vsj", 125, 0, 0, 0),
+        ("Test4/C6vsj/C6vsj.vsj", 125, 0, 0, 1),
+        ("Test4/C7vsj/C7vsj.vsj", 125, 0, 0, 0),
+        ("Test4/C8vsj/C8vsj.vsj", 125, 0, 0, 0),
+        ("Test4/C9vsj/C9vsj.vsj", 125, 0, 0, 0),
+        ("Test4/C10vsj/C10vsj.vsj", 125, 75, 0, 0),
+        ("Test4/C11/C11.vsj", 125, 0, 0, 0),
+        ("Test4/C12/C12.vsj", 125, 0, 127, 0),
+        ("Test4/C13vsj/C13vsj.vsj", 56, 0, 0, 0),
+    ];
+
+    #[test]
+    fn global_settings_of_all_projects() {
+        for (rel, tempo, swing, reverb, shown) in EXPECTED {
+            let s = project(rel).settings().unwrap();
+            assert_eq!(
+                (s.tempo, s.swing, s.reverb, s.shown_sequence),
+                (tempo, swing, reverb, shown),
+                "{rel}"
+            );
+        }
+        // Maximum tempo (C14).
+        assert_eq!(
+            project("Test4/C14vsj/C14vsj.vsj").settings().unwrap().tempo,
+            240
+        );
+    }
+
+    #[test]
+    fn variable_strings_do_not_disturb_settings() {
+        // C4/C5 (and Test2) have strings before the settings, which move.
+        for rel in [
+            "Test4/C4vsj/C4vsj.vsj",
+            "Test4/C5vsj/C5vsj.vsj",
+            "Test2/Test2.vsj",
+        ] {
+            let p = project(rel);
+            assert_ne!(p.vsj[223], 125, "{rel}: settings should have moved");
+            assert_eq!(p.settings().unwrap().tempo, 125, "{rel}");
+        }
+    }
+
+    #[test]
+    fn import_takes_tempo_swing_reverb() {
+        let (p, errors) = project("Test1/Test1.vsj").to_project();
+        assert!(errors.iter().all(|e| !matches!(e, Error::Layout(_))));
+        assert_eq!((p.tempo, p.swing, p.reverb), (125, Some(14), Some(45)));
+        let (p, _) = project("Test4/C13vsj/C13vsj.vsj").to_project();
+        assert_eq!(p.tempo, 56);
+    }
+
+    #[test]
+    fn test4_sequences_match_the_notes() {
+        let s1 = |rel: &str| project(rel).sequences[0];
+        assert_eq!(s1("Test4/C1vsj/C1vsj.vsj").Part[0].StepOn, 0b1);
+        assert_eq!(s1("Test4/C2vsj/C2vsj.vsj").Part[0].StepOn, 0b1_0001);
+        assert_eq!(s1("Test4/C3vsj/C3vsj.vsj").Part[0].FuncMemoryPart, 0x11);
+        let level = MotionRow::LevelStart as usize;
+        let c4 = s1("Test4/C4vsj/C4vsj.vsj");
+        assert_eq!(c4.Part[6].Motion[level][8], 128 + 68);
+        assert_eq!(c4.Part[6].FuncMemoryPart, 0x10);
+        let c5 = s1("Test4/C5vsj/C5vsj.vsj");
+        assert_eq!(c5.Part[6].Motion[level][8..10], [128 + 68, 128 + 71]);
+        let c6 = project("Test4/C6vsj/C6vsj.vsj");
+        assert_eq!(c6.sequences[1].Part[6].Motion[level][8], 128 + 68);
+        assert_eq!(c6.sequences[0].Part[6].Motion[level][8], 0);
+        assert_eq!(s1("Test4/C7vsj/C7vsj.vsj").ActiveStep, 0xfffe);
+        let c8 = project("Test4/C8vsj/C8vsj.vsj");
+        assert_eq!(c8.sequences[0].Part[0].SampleNum, 5);
+        assert!(c8.index.slots[5].used);
+    }
+}

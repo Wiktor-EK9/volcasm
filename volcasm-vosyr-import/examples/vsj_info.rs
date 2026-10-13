@@ -34,6 +34,16 @@ fn run() -> Result<(), Box<dyn Error>> {
         .ok_or("usage: vsj_info <project.vsj>")?;
     let project = load(Path::new(&path))?;
     println!("project {} ({})", project.name, project.dir.display());
+    match project.settings() {
+        Ok(s) => println!(
+            "tempo {} BPM, swing {}, reverb {}, shown sequence {}",
+            s.tempo,
+            s.swing,
+            s.reverb,
+            s.shown_sequence + 1
+        ),
+        Err(err) => println!("settings not read: {err}"),
+    }
 
     println!("\nsamples:");
     let mut total_frames = 0;

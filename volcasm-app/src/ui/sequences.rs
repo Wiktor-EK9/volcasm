@@ -32,8 +32,19 @@ const KNOBS: [(Param, &str, i32); 10] = [
     (Param::HiCut, "hi cut", 127),
 ];
 
-pub fn show(ui: &mut Ui, state: &mut AppState) {
-    header(ui, state);
+/// Preview state shown by the editor.
+pub struct Transport {
+    pub playing: bool,
+    /// Step playing now (1-16).
+    pub step: Option<usize>,
+    /// Playing is allowed (not during a transfer).
+    pub can_play: bool,
+}
+
+/// Shows the editor. Returns true when PLAY/STOP was pressed.
+pub fn show(ui: &mut Ui, state: &mut AppState, transport: &Transport) -> bool {
+    let toggled = header(ui, state, transport);
+    let playhead = transport.step.filter(|_| transport.playing);
     for warning in state.pattern_warnings() {
         ui.colored_label(style::WARNING, warning);
     }
@@ -42,15 +53,50 @@ pub fn show(ui: &mut Ui, state: &mut AppState) {
         for part in 0..PARTS {
             // Each part gets its own id space: the parts repeat the same
             // widgets (knob labels, buttons).
-            ui.push_id(("part", part), |ui| part_row(ui, state, part));
+            ui.push_id(("part", part), |ui| part_row(ui, state, part, playhead));
             ui.add_space(6.0);
         }
         ui.separator();
-        active_steps(ui, state);
+        active_steps(ui, state, playhead);
     });
+    toggled
 }
 
-fn header(ui: &mut Ui, state: &mut AppState) {
+fn header(ui: &mut Ui, state: &mut AppState, transport: &Transport) -> bool {
+    let mut toggled = false;
+    ui.horizontal(|ui| {
+        let (text, fill) = if transport.playing {
+            ("stop", style::ACCENT)
+        } else {
+            ("play", style::TILE_FILLED)
+        };
+        let button = egui::Button::new(egui::RichText::new(style::caps(text)).size(18.0))
+            .fill(fill)
+            .min_size(egui::vec2(90.0, 30.0));
+        if ui
+            .add_enabled(transport.can_play || transport.playing, button)
+            .on_disabled_hover_text(style::caps("not during a transfer"))
+            .clicked()
+        {
+            toggled = true;
+        }
+        ui.label(style::label("Tempo"));
+        let mut tempo = state.project.tempo;
+        let range = volcasm_core::project::TEMPO_RANGE;
+        if ui
+            .add(egui::DragValue::new(&mut tempo).range(range).suffix(" BPM"))
+            .changed()
+        {
+            state.project.tempo = tempo;
+            state.dirty = true;
+        }
+        ui.label(
+            egui::RichText::new(style::caps("preview is an approximation of the volca"))
+                .small()
+                .color(style::TEXT_DIM),
+        );
+    });
+    ui.add_space(4.0);
     ui.horizontal_wrapped(|ui| {
         ui.label(style::brand(
             &format!("sequence {}", state.pattern + 1),
@@ -94,9 +140,10 @@ fn header(ui: &mut Ui, state: &mut AppState) {
             state.undo_pattern();
         }
     });
+    toggled
 }
 
-fn part_row(ui: &mut Ui, state: &mut AppState, i: usize) {
+fn part_row(ui: &mut Ui, state: &mut AppState, i: usize, playhead: Option<usize>) {
     let pattern = *state.current_pattern();
     let part = pattern.part(i);
     let frame = egui::Frame::new()
@@ -125,6 +172,14 @@ fn part_row(ui: &mut Ui, state: &mut AppState, i: usize) {
                     let muted = !part.muted();
                     state.edit_pattern(("mute", i, 0), |p| p.part_mut(i).set_muted(muted));
                 }
+                // Solo: preview only, not part of the pattern data.
+                if ui
+                    .selectable_label(state.solo[i], style::label("solo"))
+                    .on_hover_text(style::caps("preview only"))
+                    .clicked()
+                {
+                    state.solo[i] = !state.solo[i];
+                }
                 ui.separator();
                 for (view, name) in [
                     (PartView::Params, "params"),
@@ -140,7 +195,7 @@ fn part_row(ui: &mut Ui, state: &mut AppState, i: usize) {
             let steps = part.steps();
             let active = pattern.active_steps();
             if let Some((bits, new_gesture)) =
-                step_row(ui, Id::new(("steps", i)), steps, Some(active))
+                step_row(ui, Id::new(("steps", i)), steps, Some(active), playhead)
             {
                 if new_gesture {
                     state.end_edit();
@@ -288,7 +343,7 @@ fn speed_knob(ui: &mut Ui, state: &mut AppState, i: usize, speed: Speed) {
     }
 }
 
-fn active_steps(ui: &mut Ui, state: &mut AppState) {
+fn active_steps(ui: &mut Ui, state: &mut AppState, playhead: Option<usize>) {
     ui.horizontal(|ui| {
         ui.label(style::label("Active step"));
         ui.label(
@@ -298,7 +353,7 @@ fn active_steps(ui: &mut Ui, state: &mut AppState) {
         );
     });
     let bits = state.current_pattern().active_steps();
-    if let Some((bits, new_gesture)) = step_row(ui, Id::new("active-steps"), bits, None) {
+    if let Some((bits, new_gesture)) = step_row(ui, Id::new("active-steps"), bits, None, playhead) {
         if new_gesture {
             state.end_edit();
         }
@@ -309,7 +364,13 @@ fn active_steps(ui: &mut Ui, state: &mut AppState) {
 /// 16 step buttons for `bits`. Pressing a step toggles it; dragging across
 /// steps sets them all to that new state. `active` dims inactive steps.
 /// Returns the new bits when changed, and whether a new click or drag began.
-fn step_row(ui: &mut Ui, id: Id, bits: u16, active: Option<u16>) -> Option<(u16, bool)> {
+fn step_row(
+    ui: &mut Ui,
+    id: Id,
+    bits: u16,
+    active: Option<u16>,
+    playhead: Option<usize>,
+) -> Option<(u16, bool)> {
     // Shrink the steps to fit narrow windows.
     let size = (ui.available_width() / STEPS as f32 - STEP_GAP).clamp(14.0, STEP_SIZE);
     let pitch = size + STEP_GAP;
@@ -360,6 +421,14 @@ fn step_row(ui: &mut Ui, id: Id, bits: u16, active: Option<u16>) -> Option<(u16,
             style::TILE_FILLED
         };
         painter.rect_stroke(cell, 3.0, Stroke::new(1.0, stroke), StrokeKind::Inside);
+        if playhead == Some(index + 1) {
+            painter.rect_stroke(
+                cell,
+                3.0,
+                Stroke::new(2.5, style::TEXT),
+                StrokeKind::Outside,
+            );
+        }
         painter.text(
             cell.center(),
             Align2::CENTER_CENTER,

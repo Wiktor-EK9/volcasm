@@ -1,6 +1,7 @@
 //! Volcasm: sample and pattern manager for the KORG volca sample.
 
 mod app;
+mod preview;
 mod state;
 mod ui;
 

@@ -7,8 +7,10 @@
 pub mod check;
 pub mod graph;
 pub mod output;
+pub mod player;
 pub mod preview;
 
 pub use output::{Canceller, OutputInfo, Phase, Report, Transfer, TransferError, TransferOptions};
 pub use output::{list_outputs, start};
+pub use player::Player;
 pub use preview::{Preview, preview};

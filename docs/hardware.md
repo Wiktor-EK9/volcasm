@@ -130,3 +130,30 @@ Sprawdzone bez Volci: odmowa przy wyjściu 48 kHz z nieznanymi formatami
 (wcześniejsza wersja kontroli), ostrzeżenie i transfer ciszy na wyjściu
 Headphones przy `clock.force-rate 0`. `play_syro --status` pokazuje
 ustawienia zegara i częstotliwości obsługiwane przez wyjścia.
+
+## 4. Podgląd sekwencji: model brzmienia (etap 10)
+
+Silnik dźwięku Volci nie jest opisany w SDK. Podgląd w Volcasm jest
+przybliżeniem; wszystkie odwzorowania są w
+`volcasm-core/src/preview/model.rs` i tylko tam zmienia je kalibracja.
+
+| element | w podglądzie | status |
+|---|---|---|
+| siatka | 16 szesnastek, tempo z projektu (BPM) | pewne |
+| ACTIVE STEP | wyłączony krok jest pomijany, sekwencja krótsza | **POTWIERDZONE** (autor, na urządzeniu, 2026-10-13) |
+| SPEED w półtonach | `2^(n/12)` | **POTWIERDZONE** (test `t3_speed`) |
+| SPEED ciągły | ±63 = ±12 półtonów | HIPOTEZA (`t3_speed`: +12 brzmi „trochę wyżej”) |
+| głos | jeden na część, nowe uderzenie ucina poprzednie | HIPOTEZA |
+| START POINT, LENGTH | liniowy ułamek sampla (LENGTH: reszty po starcie) | HIPOTEZA |
+| LEVEL, PAN | liniowe wzmocnienie, panorama equal-power | HIPOTEZA |
+| AMP EG, PITCH EG | attack (0 = natychmiast) i decay kwadratowo do 4 s; DECAY 127 = bez zaniku | HIPOTEZA |
+| PITCH EG INT | ±63 = ±24 półtony w szczycie obwiedni | HIPOTEZA |
+| HI CUT | low-pass 12 dB/okt., 100 Hz…16 kHz wykładniczo, 127 = otwarty | HIPOTEZA |
+| REVERB | własny pogłos (struktura Schroedera/Freeverb), stała wysyłka 0,35 | HIPOTEZA |
+| MOTION | wartość z kroku zastępuje pokrętło; LEVEL/PAN przechodzą od start do end w obrębie kroku (README SDK) | zgodne z README |
+| MOTION SPEED | pomijane (kodowanie niepotwierdzone, D19) | — |
+| SOLO | tylko w podglądzie, nie w danych | — |
+| swing, poziom pogłosu | pominięte (ustawienia globalne w nierozpoznanym miejscu `.vsj`) | — |
+
+Kalibracja (później, poza etapem 10): nagranie wyjścia Volci przy
+wzorcach testowych z jednym zmienianym parametrem i dopasowanie tabeli.

@@ -10,6 +10,7 @@ use volcasm_audio::{OutputInfo, Phase, Preview, Transfer, TransferOptions};
 use volcasm_core::sample::{Sample, import};
 use volcasm_core::syro::{STREAM_SAMPLE_RATE, encode};
 
+use crate::preview::SequencePreview;
 use crate::state::{AppState, PartView, View, name_from_path};
 use crate::ui::sequences;
 use crate::ui::slot_panel::{self, NameEdit, PanelAction};
@@ -74,6 +75,7 @@ pub struct VolcasmApp {
     imports: Vec<ImportJob>,
     transfer: Option<TransferJob>,
     preview: Option<(usize, Preview)>,
+    sequence_preview: Option<SequencePreview>,
     outputs: Result<Vec<OutputInfo>, String>,
     name_edit: NameEdit,
     screenshot: Option<Screenshot>,
@@ -93,6 +95,7 @@ impl VolcasmApp {
             imports: Vec::new(),
             transfer: None,
             preview: None,
+            sequence_preview: None,
             outputs: list_outputs(),
             name_edit: NameEdit::default(),
             screenshot: options.screenshot.map(|path| Screenshot {
@@ -180,6 +183,7 @@ impl VolcasmApp {
         self.state = state;
         self.state.transfer = transfer;
         self.preview = None;
+        self.sequence_preview = None;
         self.report.clear();
     }
 
@@ -286,7 +290,9 @@ impl VolcasmApp {
         if targets.is_empty() {
             return;
         }
+        // Previews share the output with the transfer and would corrupt it.
         self.preview = None;
+        self.sequence_preview = None;
         self.report.clear();
         let project = self.state.project.clone();
         let bits = self.state.transfer.bits;
@@ -370,6 +376,16 @@ impl VolcasmApp {
                 self.report.push((true, err.to_string()));
                 self.error(err.to_string());
             }
+        }
+    }
+
+    fn toggle_sequence_preview(&mut self) {
+        if self.sequence_preview.take().is_some() {
+            return;
+        }
+        match SequencePreview::start(&self.state) {
+            Ok(player) => self.sequence_preview = Some(player),
+            Err(err) => self.error(format!("{}: {err}", style::caps("Cannot play"))),
         }
     }
 
@@ -602,8 +618,21 @@ impl eframe::App for VolcasmApp {
             self.preview = None;
         }
         let progress = self.poll_transfer();
-        if self.transfer.is_some() || !self.imports.is_empty() || self.preview.is_some() {
-            ctx.request_repaint_after(Duration::from_millis(100));
+        if let Some(player) = &mut self.sequence_preview {
+            player.sync(&self.state);
+        }
+        if self.transfer.is_some()
+            || !self.imports.is_empty()
+            || self.preview.is_some()
+            || self.sequence_preview.is_some()
+        {
+            // Fast enough for the playhead at high tempos.
+            let interval = if self.sequence_preview.is_some() {
+                16
+            } else {
+                100
+            };
+            ctx.request_repaint_after(Duration::from_millis(interval));
         }
         let title = self.state.title();
         if self.title != title {
@@ -688,7 +717,17 @@ impl eframe::App for VolcasmApp {
             });
         egui::CentralPanel::default().show(ui, |ui| {
             if self.state.view == View::Sequences {
-                sequences::show(ui, &mut self.state);
+                let transport = sequences::Transport {
+                    playing: self.sequence_preview.is_some(),
+                    step: self
+                        .sequence_preview
+                        .as_ref()
+                        .and_then(SequencePreview::step),
+                    can_play: self.transfer.is_none(),
+                };
+                if sequences::show(ui, &mut self.state, &transport) {
+                    self.toggle_sequence_preview();
+                }
                 return;
             }
             egui::ScrollArea::vertical().show(ui, |ui| {

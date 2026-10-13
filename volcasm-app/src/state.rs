@@ -89,6 +89,10 @@ pub struct AppState {
     last_edit: Option<(usize, EditKey)>,
     /// Part to scroll into view in the sequence editor, once.
     pub scroll_to_part: Option<usize>,
+    /// Parts soloed in the preview (not saved, not sent to the device).
+    pub solo: [bool; PARTS],
+    /// Changes whenever a sample changes, so the preview can reload them.
+    pub samples_generation: u64,
 }
 
 impl Default for AppState {
@@ -118,6 +122,8 @@ impl AppState {
             pattern_history: HashMap::new(),
             last_edit: None,
             scroll_to_part: None,
+            solo: [false; PARTS],
+            samples_generation: 0,
         }
     }
 
@@ -211,6 +217,7 @@ impl AppState {
             }
         }
         self.dirty = true;
+        self.samples_generation += 1;
         if self.selected == Some(slot) {
             self.trim = None;
         }
@@ -229,6 +236,7 @@ impl AppState {
             .map_err(|e| e.to_string())?;
         self.push_history(slot, previous);
         self.dirty = true;
+        self.samples_generation += 1;
         if self.selected == Some(slot) {
             self.trim = None;
         }
@@ -252,6 +260,7 @@ impl AppState {
         }
         if let Ok(Some(_)) = self.project.clear_slot(slot) {
             self.dirty = true;
+            self.samples_generation += 1;
             if self.selected == Some(slot) {
                 self.trim = None;
             }

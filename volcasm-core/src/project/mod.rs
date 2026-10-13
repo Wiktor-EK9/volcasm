@@ -60,6 +60,11 @@ impl fmt::Display for ProjectError {
 
 impl std::error::Error for ProjectError {}
 
+/// Tempo of a new project and of files without a tempo, in BPM.
+pub const DEFAULT_TEMPO: u16 = 120;
+/// Tempo range of the preview, in BPM.
+pub const TEMPO_RANGE: std::ops::RangeInclusive<u16> = 40..=300;
+
 /// Sample slots and patterns for one device.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Project {
@@ -68,6 +73,8 @@ pub struct Project {
     pub author: Option<String>,
     pub license: Option<String>,
     pub description: Option<String>,
+    /// Tempo for the preview, in BPM. Not sent to the device.
+    pub tempo: u16,
     slots: Vec<Option<Slot>>,
     patterns: Vec<Pattern>,
 }
@@ -81,6 +88,7 @@ impl Project {
             author: None,
             license: None,
             description: None,
+            tempo: DEFAULT_TEMPO,
             slots: vec![None; device.sample_slots as usize],
             patterns: vec![Pattern::default(); device.patterns as usize],
         }

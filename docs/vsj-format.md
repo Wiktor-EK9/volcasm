@@ -8,9 +8,12 @@ ekranu, bez dostępu do kodu Vosyra. Aktualizuj go po każdym nowym teście.
 - `Test2`: sekwencje z wszystkimi funkcjami części (opis w `Test2.txt`)
 - `Test3`: seria `B1`..`B8r`, w każdej jedna zmiana względem pustego
   projektu `B1` (opis w `Testy B.txt`)
+- Test na sprzęcie (Volca Sample, 2026-10-13): trzy wzorce testowe
+  zbudowane z `B1` i przesłane przez SYRO, ocena odsłuchem (sekcja 4)
 
 **Legenda statusów:**
-- **POTWIERDZONE**: zgodne ze zrzutami ekranu, testem kontrolowanym i/lub SDK
+- **POTWIERDZONE**: zgodne ze zrzutami ekranu, testem kontrolowanym, SDK
+  i/lub testem na sprzęcie
 - **HIPOTEZA**: spójne z danymi, ale bez bezpośredniego dowodu
 - **NIEZNANE**: wartości widoczne w pliku, znaczenie nieustalone
 
@@ -91,10 +94,11 @@ Nagłówek i stopka zgodne z SDK **(POTWIERDZONE)**: `Header` = 0x54535450
 |---|---|---|---|
 | 0 | 4 | Header 0x54535450 | POTWIERDZONE |
 | 4 | 2 | DevCode 0x33b8 | POTWIERDZONE |
-| 6 | 2 | `0x00ff` we wszystkich plikach | NIEZNANE |
+| 6 | 2 | `Reserved[2]` w SDK; `ff 00` we wszystkich plikach, tak samo w presetach Korga | POTWIERDZONE (nazwa z SDK), znaczenie NIEZNANE |
 | 8 | 2 | **ActiveStep**, bit n = krok n+1, domyślnie 0xffff | POTWIERDZONE |
-| 10 | 22 | stałe we wszystkich plikach (poza ActiveStep), głównie 0xff z kilkoma wyzerowanymi bitami | NIEZNANE (porównać z `VolcaSample_Pattern_Init`) |
+| 10 | 22 | `Padding1[0x16]` w SDK; głównie 0xff z kilkoma wyzerowanymi bitami, bajt w bajt jak w presetach Korga (`pattern/preset_pattern_*.dat`). `VolcaSample_Pattern_Init` wpisuje tu zera | POTWIERDZONE (wartości fabryczne), znaczenie NIEZNANE |
 | 32 + 256*i | 256 | część P(i+1), i = 0..9 | POTWIERDZONE (odstęp 256) |
+| 2592 | 28 | `Padding2[0x1c]` w SDK | POTWIERDZONE (SDK) |
 | 2620 | 4 | Footer | POTWIERDZONE |
 
 ActiveStep potwierdzony w `Test2`: S2 z wyłączonymi krokami 1 i 16 = 0x7ffe,
@@ -111,12 +115,12 @@ Część (256 B), offsety względem początku części:
 | +0 | 2 | SampleNum (numer slotu 0-99) | POTWIERDZONE (Test1 S1, Test2 P9 = 24) |
 | +2 | 2 | StepOn, bit n = krok n+1 | POTWIERDZONE (Test1 S4 P1-P4) |
 | +4 | 2 | Accent = 0 | zgodne z SDK |
-| +6 | 2 | zera we wszystkich testach | NIEZNANE |
+| +6 | 2 | `Reserved` w SDK, zera we wszystkich testach | POTWIERDZONE (SDK) |
 | +8 | 1 | Level = 127 (SDK: musi być 127) | zgodne z SDK |
 | +9 | 11 | Param[0..10], patrz niżej | POTWIERDZONE |
 | +20 | 1 | FuncMemoryPart, patrz niżej | POTWIERDZONE |
-| +21 | 11 | zera we wszystkich testach | NIEZNANE |
-| +32 | 224 | Motion[14][16], patrz niżej | POTWIERDZONE (układ), rzędy częściowo HIPOTEZA |
+| +21 | 11 | `Padding1[11]` w SDK, zera we wszystkich testach | POTWIERDZONE (SDK) |
+| +32 | 224 | Motion[14][16], patrz niżej | POTWIERDZONE (układ i wiersze, SDK) |
 
 ### Param[] (11 bajtów @ +9)
 
@@ -128,15 +132,36 @@ Kodowanie bajtu (z UI), **POTWIERDZONE**:
   HI CUT: `bajt = 128 + wartość`, wartość 0..127 (bajty 128..255)
 - PAN, PITCH EG INT: `bajt = 192 + wartość`, wartość −63..+63 (bajty 129..255)
 - SPEED (tryb ciągły): `bajt = 192 + wartość`, wartość −63..+63 (129..255)
-- SPEED w trybie półtonów: **nieobserwowany** (SDK: 40..88, środek 64)
+- SPEED w trybie półtonów: `bajt = 64 + półtony` (bit 7 = 0), patrz niżej.
+  Kodowanie w plikach Vosyra nieobserwowane (test 9 w sekcji 6)
 
 Skrajne wartości potwierdzone w `Test2` (P9): PAN −63 -> 129, SPEED +63 -> 255,
 PITCH EG INT −63 -> 129, PITCH EG ATTACK 127 -> 255, PITCH EG DECAY 0 -> 128.
 Pełne zestawy wartości zgodne ze zrzutami: Test1 S1 P1 i S4 P8 (22/22).
 
-**Uwaga:** README SDK podaje zakresy 0-127 dla tych parametrów, a pliki
-Vosyra mają przesunięcie +128. Przed implementacją sprawdź wartości w
-`volcasample_pattern.c` (`VolcaSample_Pattern_Init`).
+**Przesunięcie +128 (bit 7), ustalone na etapie 2:** README SDK podaje
+zakresy 0-127, a `VolcaSample_Pattern_Init` wpisuje surowe wartości
+(`7f 40 40 00 7f 40 00 7f 00 7f 7f`). Jednak fabryczne wzorce Korga
+(`pattern/preset_pattern_01..10.dat` w SDK) mają bit 7 ustawiony tak samo
+jak Vosyr (np. `7f ff c0 af 80 ff ...`). Domyślna część Vosyra to dokładnie
+`Init` + 0x80 na każdym bajcie `Param[]`. Kodowanie +128 jest więc zgodne
+z danymi z urządzenia. **POTWIERDZONE** (presety Korga).
+
+**Bit 7 na sprzęcie, POTWIERDZONE (test 2026-10-13, wzorzec `t2_bit7`):**
+część z surowymi wartościami `Init` (bez bitu 7) i PAN = `0x7f` grała
+w prawym kanale, z normalnym poziomem, naprzemiennie z częścią zapisaną
+jak w Vosyrze (PAN = `0x81`, lewy kanał). Dla parametrów innych niż SPEED
+bit 7 nie zmienia działania, a wartość niosą bity 0-6. Przy zapisie
+trzymamy się kodowania z bitem 7 (Vosyr, presety Korga).
+
+**SPEED, POTWIERDZONE (test 2026-10-13, wzorzec `t3_speed`):** bit 7
+wybiera tryb.
+- bit 7 = 1: tryb ciągły, `bajt = 192 + wartość` (−63..+63);
+- bit 7 = 0: tryb półtonów, `bajt = 64 + półtony`. `0x4c` (+12) zabrzmiało
+  oktawę wyżej niż `0xc0`, a `0xcc` (ciągły +12) tylko trochę wyżej.
+Zakres półtonów 40..88 (±24) pochodzi z README SDK, skrajne wartości
+nietestowane. Presety Korga używają obu trybów (np. preset 01, część 3:
+`0x40`).
 
 ### FuncMemoryPart (1 bajt @ +20), POTWIERDZONE w Test2
 
@@ -146,7 +171,7 @@ Vosyra mają przesunięcie +128. Przed implementacją sprawdź wartości w
 | 1 | LOOP | P2: 0x12 |
 | 2 | REVERB | P3: 0x14 |
 | 3 | REVERSE | P4: 0x18 |
-| 4 | **1 = nie wyciszony** (MUTE zeruje bit) | domyślnie 0x10, P5 z MUTE: 0x00 |
+| 4 | **1 = część gra**, 0 = wyciszona (MUTE zeruje bit) | domyślnie 0x10, P5 z MUTE: 0x00. Nazwa w SDK (`VOLCASAMPLE_FUNC_MUTE`) jest myląca. **POTWIERDZONE na sprzęcie** (wzorzec `t1_mute`: słychać tylko część z bitem 4 = 1) |
 
 Flaga MOTION jest niezależna od danych: P7 i P8 mają dane motion przy
 FuncMemoryPart = 0x10 (MOTION wyłączony). Bity 5-7 nieobserwowane (zawsze 0).
@@ -164,15 +189,15 @@ Trzy zmierzone punkty, **POTWIERDZONE**:
 | P8 | AMP EG ATTACK 45, krok 6 | +133 | 6, 5 | 173 |
 | P8 | HI CUT 68, krok 14 | +253 | 13, 13 | 196 |
 
-Pozostałe wiersze **HIPOTEZA**, spójna z 14 wierszami i etykietą
-"LEVEL START/END" w UI Vosyra (LEVEL, PAN, SPEED mają wartość początkową
-i końcową kroku):
+Wiersze **POTWIERDZONE** nazwami stałych w SDK
+(`VOLCASAMPLE_MOTION_LEVEL_0` ... `VOLCASAMPLE_MOTION_HICUT`, 0-13),
+zgodne z trzema pomiarami i etykietą "LEVEL START/END" w UI Vosyra:
 
 | wiersz | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | parametr | LEVEL start | LEVEL end | PAN start | PAN end | SPEED start | SPEED end | AMP ATK | AMP DEC | PITCH INT | PITCH ATK | PITCH DEC | START | LENGTH | HI CUT |
 
-Wiersze 0, 6, 13 zmierzone, reszta wynika z liczby 14 i kolejności Param[].
+Wiersze 0, 6, 13 zmierzone w Vosyrze, wszystkie 14 nazwane w `volcasample_pattern.h`.
 
 ## 5. `Test1.vsj` (plik projektu)
 
@@ -240,16 +265,19 @@ w Test2):
 4. Tylko dane motion: LEVEL 69 na kroku 9 w P7, MOTION wyłączony.
 5. Tylko włączony jeden krok wzorca (P1, krok 1).
 6. Tylko ACTIVE STEP 1 wyłączony w S1.
-7. Tylko START POINT 5 w P6 (zrzut w `Test2` pokazuje START POINT 5, mimo
-   że `Test2.txt` mówi "SPEED +5").
+7. Tylko START POINT 5 w P6. (Rozbieżność z `Test2` rozstrzygnięta: plik
+   ma w P6 START POINT = `0x85`, SPEED domyślny, więc "SPEED +5" w
+   `Test2.txt` to pomyłka opisu.)
 
 Cel B: dokończyć dekodowanie sekwencji:
 8. Jeden projekt, jedna część (np. P1) z motion na wszystkich 14 polach
    (LEVEL start/end, PAN start/end, SPEED start/end, AMP ATK, AMP DEC,
    PITCH INT, PITCH ATK, PITCH DEC, START, LENGTH, HI CUT), każde w innym
-   kroku 1-14. Zapisz listę "pole -> krok". Zweryfikuje wiersze Motion.
+   kroku 1-14. Zapisz listę "pole -> krok". Wiersze są już potwierdzone
+   przez SDK, test tylko dla pewności, że Vosyr zapisuje je tak samo.
 9. SPEED w trybie półtonów (przełącznik przy etykiecie SPEED): P1 = +5,
-   P2 = −5.
+   P2 = −5. Sprzęt już potwierdził kodowanie (`64 + półtony`); test sprawdzi,
+   czy Vosyr zapisuje tak samo.
 10. Wzorzec z włączoną akcentem, jeśli Vosyr ma Accent.
 
 Cel C: zakresy ustawień globalnych:

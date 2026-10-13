@@ -45,8 +45,11 @@ i indeks sampli bez rekordów, katalog `samples/` bez plików WAV.
   (np. `1791829490708` = 2026-10-12 18:24:50 UTC, zgodnie z godziną na
   zrzutach). **HIPOTEZA** (potwierdzone tylko zgodnością dat).
 - Suma rozmiarów plików w `Test1` = 3 595 158 B, UI pokazuje "MEMORY:
-  3.60MB" (MB dziesiętne). Suma ramek = 57,505 s, UI pokazuje "57.51S"
-  (zaokrąglenie). **POTWIERDZONE.**
+  3.60MB" (MB dziesiętne). Suma ramek = 1 797 029 (57,5049 s, sprawdzone
+  loaderem i modułem `wave` Pythona), UI pokazuje "57.51S". **POTWIERDZONE**
+  (suma). Zwykłe zaokrąglenie dałoby 57.50, więc Vosyr najpewniej zaokrągla
+  w górę. **HIPOTEZA** (jeden punkt danych). (Korekta 2026-10-13: wcześniej
+  zapisano sumę jako 57,505 s.)
 - Dodanie sampla nie zmienia pliku `.vsj` (patrz sekcja 5, B6-B8r).
 
 ## 3. `samples/samples` (indeks slotów)
@@ -79,6 +82,10 @@ Potwierdzone testami `Test3`:
   (`Samp1`, `Samp3`) **HIPOTEZA** (nazwy źródłowych plików nie były podane);
 - usunięcie sampla (`B8r`) zeruje cały rekord slotu (indeks wraca do stanu
   jak dla pustego slotu) i usuwa plik WAV z `samples/`.
+- katalog `B7r/samples/` zawiera także plik `sample1791835640753` (sampel
+  `Samp1` z `B8`), którego indeks nie wymienia. Skąd się wziął, nie wiadomo
+  (być może kolejność zapisów przy testach). **NIEZNANE.** Loader czyta
+  tylko pliki wskazane w indeksie, a resztę pomija.
 
 ## 4. `sequences/sequenceNN` (NN = 01..10)
 

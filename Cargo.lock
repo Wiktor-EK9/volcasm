@@ -1345,6 +1345,9 @@ dependencies = [
 [[package]]
 name = "volcasm-vosyr-import"
 version = "0.1.0"
+dependencies = [
+ "volcasm-core",
+]
 
 [[package]]
 name = "walkdir"

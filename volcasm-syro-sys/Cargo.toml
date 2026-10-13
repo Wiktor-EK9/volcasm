@@ -7,6 +7,10 @@ edition.workspace = true
 license = "GPL-3.0-or-later AND BSD-3-Clause"
 links = "syro_volcasample"
 
+[features]
+# Builds the unmodified SDK example as a reference binary for tests.
+reference-example = []
+
 [build-dependencies]
 bindgen = "0.73.2"
 cc = "1.8.0"

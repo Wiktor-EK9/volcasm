@@ -5,3 +5,8 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+volcasm-syro-sys = { path = "../volcasm-syro-sys" }
+
+[dev-dependencies]
+hound = "3.5.1"
+volcasm-syro-sys = { path = "../volcasm-syro-sys", features = ["reference-example"] }

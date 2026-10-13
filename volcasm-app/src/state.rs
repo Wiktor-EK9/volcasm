@@ -1,7 +1,7 @@
 //! Application state and the operations the UI triggers. No egui here, so
 //! the logic is testable on its own.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use volcasm_core::device::VOLCA_SAMPLE;
@@ -12,6 +12,9 @@ use volcasm_core::sample::{Sample, edit};
 /// Compression choices offered for a transfer (bits per sample). 16 bits is
 /// lossless (`docs/hardware.md`, section 2) and shortens the stream.
 pub const BIT_CHOICES: [u32; 9] = [16, 15, 14, 13, 12, 11, 10, 9, 8];
+
+/// Undo steps kept per slot (session only, not saved).
+pub const UNDO_DEPTH: usize = 10;
 
 /// Transfer settings.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -47,7 +50,11 @@ pub struct AppState {
     pub checked: BTreeSet<usize>,
     /// Trim range (frames) being edited for the selected slot.
     pub trim: Option<std::ops::Range<usize>>,
+    /// Semitones chosen in the pitch control.
+    pub pitch: i32,
     pub transfer: TransferSettings,
+    /// Previous contents of each slot, newest last (`None` = was empty).
+    history: HashMap<usize, Vec<Option<Slot>>>,
 }
 
 impl Default for AppState {
@@ -65,7 +72,9 @@ impl AppState {
             selected: None,
             checked: BTreeSet::new(),
             trim: None,
+            pitch: 0,
             transfer: TransferSettings::default(),
+            history: HashMap::new(),
         }
     }
 
@@ -123,11 +132,59 @@ impl AppState {
         self.checked = self.project.slots().map(|(n, _)| n).collect();
     }
 
-    /// Puts an imported sample into `slot`, named after `name`.
+    /// Saves the current content of `slot` for [`Self::undo`].
+    fn remember(&mut self, slot: usize) {
+        let current = self.project.slot(slot).cloned();
+        self.push_history(slot, current);
+    }
+
+    fn push_history(&mut self, slot: usize, content: Option<Slot>) {
+        let steps = self.history.entry(slot).or_default();
+        steps.push(content);
+        if steps.len() > UNDO_DEPTH {
+            steps.remove(0);
+        }
+    }
+
+    /// Whether `slot` has an edit to undo.
+    pub fn can_undo(&self, slot: usize) -> bool {
+        self.history
+            .get(&slot)
+            .is_some_and(|steps| !steps.is_empty())
+    }
+
+    /// Restores the previous content of `slot`.
+    pub fn undo(&mut self, slot: usize) -> bool {
+        let Some(previous) = self.history.get_mut(&slot).and_then(Vec::pop) else {
+            return false;
+        };
+        match previous {
+            Some(content) => {
+                // It was a valid slot before, so it still is.
+                let _ = self.project.set_slot(slot, content);
+            }
+            None => {
+                let _ = self.project.clear_slot(slot);
+            }
+        }
+        self.dirty = true;
+        if self.selected == Some(slot) {
+            self.trim = None;
+        }
+        true
+    }
+
+    /// Puts an imported sample into `slot`, named after `name`. The previous
+    /// content can be restored with [`Self::undo`].
     pub fn set_sample(&mut self, slot: usize, name: String, sample: Sample) -> Result<(), String> {
+        if slot >= self.slot_count() {
+            return Err(format!("slot {slot} out of range"));
+        }
+        let previous = self.project.slot(slot).cloned();
         self.project
             .set_slot(slot, Slot { name, sample })
             .map_err(|e| e.to_string())?;
+        self.push_history(slot, previous);
         self.dirty = true;
         if self.selected == Some(slot) {
             self.trim = None;
@@ -147,6 +204,9 @@ impl AppState {
     }
 
     pub fn clear(&mut self, slot: usize) {
+        if self.project.slot(slot).is_some() {
+            self.remember(slot);
+        }
         if let Ok(Some(_)) = self.project.clear_slot(slot) {
             self.dirty = true;
             if self.selected == Some(slot) {
@@ -178,6 +238,18 @@ impl AppState {
             self.set_sample(slot, name, sample)?;
         }
         Ok(gain)
+    }
+
+    /// Shifts the selected slot by [`Self::pitch`] semitones.
+    pub fn pitch_selected(&mut self) -> Result<(), String> {
+        let slot = self.selected.ok_or("no slot selected")?;
+        let current = self.project.slot(slot).ok_or("empty slot")?;
+        if self.pitch == 0 {
+            return Ok(());
+        }
+        let sample = edit::pitch(&current.sample, self.pitch).map_err(|e| e.to_string())?;
+        let name = current.name.clone();
+        self.set_sample(slot, name, sample)
     }
 
     /// What a transfer of the checked slots sends: filled slots as samples,
@@ -272,6 +344,46 @@ mod tests {
         assert!(s.trim.is_some());
         s.select(2);
         assert!(s.trim.is_none());
+    }
+
+    #[test]
+    fn undo_restores_previous_versions() {
+        let mut s = AppState::default();
+        s.set_sample(2, "a".into(), sample(&[0, 100, -200, 50]))
+            .unwrap();
+        s.select(2);
+        s.trim = Some(1..3);
+        s.apply_trim().unwrap();
+        s.normalize_selected().unwrap();
+        s.pitch = 12;
+        s.pitch_selected().unwrap();
+        s.clear(2);
+        assert!(s.project.slot(2).is_none());
+        // clear -> pitch -> normalize -> trim -> load
+        assert!(s.undo(2));
+        assert_eq!(s.project.slot(2).unwrap().sample.frames(), 1);
+        assert!(s.undo(2));
+        assert_eq!(s.project.slot(2).unwrap().sample.pcm, [16_384, -32_767]);
+        assert!(s.undo(2));
+        assert_eq!(s.project.slot(2).unwrap().sample.pcm, [100, -200]);
+        assert!(s.undo(2));
+        assert_eq!(s.project.slot(2).unwrap().sample.pcm, [0, 100, -200, 50]);
+        assert!(s.undo(2));
+        assert!(s.project.slot(2).is_none());
+        assert!(!s.can_undo(2) && !s.undo(2));
+    }
+
+    #[test]
+    fn undo_depth_is_limited() {
+        let mut s = AppState::default();
+        for i in 0..UNDO_DEPTH as i16 + 5 {
+            s.set_sample(0, "x".into(), sample(&[i + 1])).unwrap();
+        }
+        let mut steps = 0;
+        while s.undo(0) {
+            steps += 1;
+        }
+        assert_eq!(steps, UNDO_DEPTH);
     }
 
     #[test]

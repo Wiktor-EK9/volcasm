@@ -1,6 +1,7 @@
 //! Panel of the selected slot: name, waveform with trim handles, edits.
 
 use eframe::egui::{self, Ui};
+use volcasm_core::sample::edit::{PITCH_RANGE, pitched_frames};
 
 use super::{style, waveform};
 use crate::state::AppState;
@@ -12,6 +13,8 @@ pub enum PanelAction {
     Clear(usize),
     ApplyTrim,
     Normalize,
+    Pitch,
+    Undo(usize),
 }
 
 /// Name being edited, kept between frames.
@@ -41,6 +44,9 @@ pub fn show(ui: &mut Ui, state: &mut AppState, edit: &mut NameEdit) -> Vec<Panel
                 .small()
                 .color(style::TEXT_DIM),
         );
+        if state.can_undo(n) && ui.button(style::label("Undo")).clicked() {
+            actions.push(PanelAction::Undo(n));
+        }
         return actions;
     };
 
@@ -95,6 +101,35 @@ pub fn show(ui: &mut Ui, state: &mut AppState, edit: &mut NameEdit) -> Vec<Panel
     });
 
     ui.add_space(6.0);
+    ui.horizontal(|ui| {
+        ui.label(style::label("Pitch"));
+        ui.add(
+            egui::DragValue::new(&mut state.pitch)
+                .range(PITCH_RANGE)
+                .speed(0.1)
+                .suffix(" ST"),
+        );
+        let pitched = pitched_frames(frames, state.pitch);
+        ui.label(
+            egui::RichText::new(format!(
+                "→ {:.3} S · {} BLK",
+                pitched as f64 / rate,
+                memory.blocks_for(pitched)
+            ))
+            .color(style::TEXT_DIM),
+        );
+        if ui
+            .add_enabled(
+                state.pitch != 0,
+                egui::Button::new(style::label("Apply pitch")),
+            )
+            .clicked()
+        {
+            actions.push(PanelAction::Pitch);
+        }
+    });
+
+    ui.add_space(6.0);
     let trimmed = range != (0..frames);
     ui.horizontal_wrapped(|ui| {
         if ui
@@ -111,6 +146,12 @@ pub fn show(ui: &mut Ui, state: &mut AppState, edit: &mut NameEdit) -> Vec<Panel
         }
         if ui.button(style::label("Normalize")).clicked() {
             actions.push(PanelAction::Normalize);
+        }
+        if ui
+            .add_enabled(state.can_undo(n), egui::Button::new(style::label("Undo")))
+            .clicked()
+        {
+            actions.push(PanelAction::Undo(n));
         }
         if ui.button(style::label("Replace…")).clicked() {
             actions.push(PanelAction::LoadFile(n));

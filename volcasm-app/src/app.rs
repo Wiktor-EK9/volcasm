@@ -617,6 +617,18 @@ impl eframe::App for VolcasmApp {
                             }
                             Err(err) => self.error(err),
                         },
+                        PanelAction::Pitch => match self.state.pitch_selected() {
+                            Ok(()) => {
+                                let text = format!("Pitch {:+} semitones", self.state.pitch);
+                                self.info(style::caps(&text));
+                            }
+                            Err(err) => self.error(err),
+                        },
+                        PanelAction::Undo(slot) => {
+                            if self.state.undo(slot) {
+                                self.info(style::caps(&format!("Undo in slot {slot}")));
+                            }
+                        }
                     }
                 }
                 ui.add_space(12.0);

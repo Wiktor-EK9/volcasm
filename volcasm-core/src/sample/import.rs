@@ -89,11 +89,31 @@ pub fn import(
     sample_rate: u32,
 ) -> Result<Sample, ImportError> {
     let decoded = decode(source, hint)?;
-    let mono = downmix(&decoded.interleaved, decoded.channels);
-    let mono = if decoded.sample_rate == sample_rate {
+    convert(
+        &decoded.interleaved,
+        decoded.channels,
+        decoded.sample_rate,
+        sample_rate,
+    )
+}
+
+/// Converts interleaved audio in -1..1 (`channels` channels at `rate`) to
+/// 16-bit mono at `sample_rate`: the same steps as for files. Used for
+/// recordings.
+pub fn convert(
+    interleaved: &[f64],
+    channels: usize,
+    rate: u32,
+    sample_rate: u32,
+) -> Result<Sample, ImportError> {
+    if channels == 0 || interleaved.len() < channels {
+        return Err(ImportError::Empty);
+    }
+    let mono = downmix(interleaved, channels);
+    let mono = if rate == sample_rate {
         mono
     } else {
-        resample(&mono, decoded.sample_rate, sample_rate)?
+        resample(&mono, rate, sample_rate)?
     };
     Ok(Sample {
         sample_rate,
@@ -217,6 +237,19 @@ mod tests {
             let out = resample(&vec![0.25; len], 44_100, 31_250).unwrap();
             assert_eq!(out.len(), (len * 31_250).div_ceil(44_100), "input {len}");
         }
+    }
+
+    #[test]
+    fn convert_recording() {
+        // 0.1 s of stereo at 48 kHz, left 0.5, right 0.
+        let interleaved: Vec<f64> = (0..4800).flat_map(|_| [0.5, 0.0]).collect();
+        let s = convert(&interleaved, 2, 48_000, 31_250).unwrap();
+        assert_eq!(s.frames(), (4800 * 31_250usize).div_ceil(48_000));
+        assert_eq!(s.pcm[s.frames() / 2], 8192);
+        assert!(matches!(
+            convert(&[], 1, 48_000, 31_250),
+            Err(ImportError::Empty)
+        ));
     }
 
     #[test]

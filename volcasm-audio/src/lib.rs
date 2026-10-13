@@ -9,8 +9,10 @@ pub mod graph;
 pub mod output;
 pub mod player;
 pub mod preview;
+pub mod recorder;
 
 pub use output::{Canceller, OutputInfo, Phase, Report, Transfer, TransferError, TransferOptions};
 pub use output::{list_outputs, start};
 pub use player::Player;
 pub use preview::{Preview, preview};
+pub use recorder::{Recorder, Recording, list_inputs};

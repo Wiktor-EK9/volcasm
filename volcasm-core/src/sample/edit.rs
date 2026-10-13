@@ -25,6 +25,23 @@ pub fn trim(sample: &Sample, range: Range<usize>) -> Option<Sample> {
     })
 }
 
+/// Removes silence before the first and after the last frame whose level
+/// reaches `threshold` (absolute 16-bit value). A sample that never reaches
+/// it is returned unchanged.
+pub fn trim_silence(sample: &Sample, threshold: i16) -> Sample {
+    let loud = |s: &i16| i32::from(*s).abs() >= i32::from(threshold);
+    match (
+        sample.pcm.iter().position(loud),
+        sample.pcm.iter().rposition(loud),
+    ) {
+        (Some(first), Some(last)) => Sample {
+            sample_rate: sample.sample_rate,
+            pcm: sample.pcm[first..=last].to_vec(),
+        },
+        _ => sample.clone(),
+    }
+}
+
 /// Scales `sample` so that its peak reaches full scale (32767), rounding to
 /// the nearest value. Silent and already full-scale samples are left as is.
 /// Returns the applied gain.
@@ -192,6 +209,13 @@ mod tests {
         let s = sample(&[1000, -1000, 500]);
         assert!(pitch(&s, 24).unwrap().frames() >= 1);
         assert_eq!(pitch(&s, -24).unwrap().frames(), 12);
+    }
+
+    #[test]
+    fn trim_silence_keeps_the_loud_part() {
+        let s = sample(&[0, 3, -2, 500, 10, -800, 4, 0]);
+        assert_eq!(trim_silence(&s, 100).pcm, [500, 10, -800]);
+        assert_eq!(trim_silence(&s, 1000), s);
     }
 
     #[test]

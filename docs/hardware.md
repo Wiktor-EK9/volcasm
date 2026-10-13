@@ -157,3 +157,18 @@ przybliżeniem; wszystkie odwzorowania są w
 
 Kalibracja (później, poza etapem 10): nagranie wyjścia Volci przy
 wzorcach testowych z jednym zmienianym parametrem i dopasowanie tabeli.
+
+## 5. Wejścia audio i nagrywanie (etap 12)
+
+Laptop deweloperski (2026-10-13, odczyt z PipeWire): jedyne wejście to
+wbudowany mikrofon cyfrowy (`Digital Microphone`, 48 kHz). Gniazdo
+słuchawkowe ma tylko wyjście (brak trasy mikrofonu headsetu i wejścia
+liniowego). **POTWIERDZONE.**
+
+Konsekwencje:
+- nagrywanie do slotu działa, ale bez karty z wejściem liniowym tylko z
+  mikrofonu lub z monitora wyjścia (to, co gra komputer);
+- kalibracja podglądu (sekcja 4) i odbiór SYNC OUT wymagają wejścia
+  liniowego, więc są odłożone (D22);
+- karta USB Audio Class z wejściem liniowym i 44,1 kHz rozwiązałaby też
+  resampling przy transferze (sekcja 3).

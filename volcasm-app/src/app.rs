@@ -6,18 +6,22 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
 use eframe::egui::{self, ViewportCommand};
-use volcasm_audio::{OutputInfo, Phase, Preview, Transfer, TransferOptions};
+use volcasm_audio::{OutputInfo, Phase, Preview, Recorder, Transfer, TransferOptions};
 use volcasm_core::sample::{Sample, import};
 use volcasm_core::syro::{STREAM_SAMPLE_RATE, encode};
 
 use crate::preview::SequencePreview;
 use crate::state::{AppState, PartView, View, name_from_path};
+use crate::ui::record_panel::{self, RecordAction};
 use crate::ui::sequences;
 use crate::ui::slot_panel::{self, NameEdit, PanelAction};
 use crate::ui::slots::{self, SlotAction};
 use crate::ui::style;
 use crate::ui::transfer_panel::{self, Progress, TransferAction};
 use volcasm_core::project::Target;
+
+/// Level below which recorded sound counts as silence: -40 dBFS.
+const SILENCE_THRESHOLD: i16 = 328;
 
 /// Audio file extensions offered when loading a sample.
 const AUDIO_EXTENSIONS: [&str; 7] = ["wav", "aif", "aiff", "flac", "mp3", "ogg", "oga"];
@@ -59,6 +63,14 @@ enum TransferJob {
     Running { transfer: Transfer, seconds: f64 },
 }
 
+struct ActiveRecording {
+    slot: usize,
+    recorder: Recorder,
+    max_seconds: f64,
+    /// Displayed level, decaying.
+    level: f32,
+}
+
 struct Screenshot {
     path: PathBuf,
     frame: u32,
@@ -76,7 +88,9 @@ pub struct VolcasmApp {
     transfer: Option<TransferJob>,
     preview: Option<(usize, Preview)>,
     sequence_preview: Option<SequencePreview>,
+    recording: Option<ActiveRecording>,
     outputs: Result<Vec<OutputInfo>, String>,
+    inputs: Result<Vec<OutputInfo>, String>,
     name_edit: NameEdit,
     screenshot: Option<Screenshot>,
     allow_close: bool,
@@ -96,7 +110,9 @@ impl VolcasmApp {
             transfer: None,
             preview: None,
             sequence_preview: None,
+            recording: None,
             outputs: list_outputs(),
+            inputs: list_inputs(),
             name_edit: NameEdit::default(),
             screenshot: options.screenshot.map(|path| Screenshot {
                 path,
@@ -180,8 +196,11 @@ impl VolcasmApp {
 
     fn replace_state(&mut self, state: AppState) {
         let transfer = self.state.transfer.clone();
+        let record = self.state.record.clone();
         self.state = state;
         self.state.transfer = transfer;
+        self.state.record = record;
+        self.recording = None;
         self.preview = None;
         self.sequence_preview = None;
         self.report.clear();
@@ -377,6 +396,75 @@ impl VolcasmApp {
                 self.error(err.to_string());
             }
         }
+    }
+
+    fn start_recording(&mut self, slot: usize) {
+        let device = self.state.project.device();
+        // Longer would not fit into the device memory anyway.
+        let max_seconds =
+            device.memory.capacity_bytes() as f64 / 2.0 / f64::from(device.sample_rate);
+        match Recorder::start(self.state.record.input.as_deref(), max_seconds) {
+            Ok(recorder) => {
+                self.recording = Some(ActiveRecording {
+                    slot,
+                    recorder,
+                    max_seconds,
+                    level: 0.0,
+                });
+                self.info(style::caps(&format!("Recording into slot {slot}")));
+            }
+            Err(err) => self.error(format!("{}: {err}", style::caps("Cannot record"))),
+        }
+    }
+
+    /// Stops recording and converts the audio in the background.
+    fn stop_recording(&mut self) {
+        let Some(active) = self.recording.take() else {
+            return;
+        };
+        let recording = active.recorder.finish();
+        let rate = self.state.project.device().sample_rate;
+        let trim = self.state.record.trim_silence;
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let interleaved: Vec<f64> = recording
+                .interleaved
+                .iter()
+                .map(|&x| f64::from(x))
+                .collect();
+            let result = import::convert(&interleaved, recording.channels, recording.rate, rate)
+                .map(|s| {
+                    if trim {
+                        volcasm_core::sample::edit::trim_silence(&s, SILENCE_THRESHOLD)
+                    } else {
+                        s
+                    }
+                })
+                .map_err(|e| e.to_string());
+            let _ = tx.send(result);
+        });
+        self.imports.push(ImportJob {
+            slot: active.slot,
+            name: "Recording".into(),
+            rx,
+        });
+    }
+
+    fn poll_recording(&mut self) -> Option<record_panel::Recording> {
+        let active = self.recording.as_mut()?;
+        active.recorder.poll();
+        active.level = active.recorder.level().max(active.level * 0.85);
+        let view = record_panel::Recording {
+            slot: active.slot,
+            seconds: active.recorder.seconds(),
+            max_seconds: active.max_seconds,
+            level: active.level,
+        };
+        if active.recorder.is_full() {
+            self.info(style::caps("Recording reached the device memory size"));
+            self.stop_recording();
+        }
+        Some(view)
     }
 
     fn toggle_sequence_preview(&mut self) {
@@ -575,6 +663,10 @@ fn progress(phase: &'static str, fraction: f32, remaining_seconds: f64) -> Progr
     }
 }
 
+fn list_inputs() -> Result<Vec<OutputInfo>, String> {
+    volcasm_audio::list_inputs().map_err(|e| format!("Cannot list audio inputs: {e}"))
+}
+
 fn list_outputs() -> Result<Vec<OutputInfo>, String> {
     volcasm_audio::list_outputs().map_err(|e| format!("Cannot list audio outputs: {e}"))
 }
@@ -618,6 +710,7 @@ impl eframe::App for VolcasmApp {
             self.preview = None;
         }
         let progress = self.poll_transfer();
+        let recording_view = self.poll_recording();
         if let Some(player) = &mut self.sequence_preview {
             player.sync(&self.state);
         }
@@ -625,6 +718,7 @@ impl eframe::App for VolcasmApp {
             || !self.imports.is_empty()
             || self.preview.is_some()
             || self.sequence_preview.is_some()
+            || self.recording.is_some()
         {
             // Fast enough for the playhead at high tempos.
             let interval = if self.sequence_preview.is_some() {
@@ -688,6 +782,24 @@ impl eframe::App for VolcasmApp {
                                 self.info(style::caps(&format!("Undo in slot {slot}")));
                             }
                         }
+                    }
+                }
+                if self.state.view == View::Samples && self.state.selected.is_some() {
+                    ui.add_space(12.0);
+                    ui.separator();
+                    ui.add_space(6.0);
+                    let busy = self.transfer.is_some();
+                    match record_panel::show(
+                        ui,
+                        &mut self.state,
+                        &self.inputs,
+                        recording_view.as_ref(),
+                        busy,
+                    ) {
+                        Some(RecordAction::Start(slot)) => self.start_recording(slot),
+                        Some(RecordAction::Stop) => self.stop_recording(),
+                        Some(RecordAction::RefreshInputs) => self.inputs = list_inputs(),
+                        None => {}
                     }
                 }
                 ui.add_space(12.0);

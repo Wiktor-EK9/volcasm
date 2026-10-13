@@ -57,6 +57,24 @@ pub enum PartView {
 /// knob being dragged) form a single undo step.
 pub type EditKey = (&'static str, usize, usize);
 
+/// Recording settings.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordSettings {
+    /// Input id from `volcasm_audio::list_inputs`; `None` = default.
+    pub input: Option<String>,
+    /// Remove silence before and after the sound.
+    pub trim_silence: bool,
+}
+
+impl Default for RecordSettings {
+    fn default() -> Self {
+        Self {
+            input: None,
+            trim_silence: true,
+        }
+    }
+}
+
 /// Everything the UI shows and edits.
 pub struct AppState {
     pub project: Project,
@@ -73,6 +91,7 @@ pub struct AppState {
     /// Semitones chosen in the pitch control.
     pub pitch: i32,
     pub transfer: TransferSettings,
+    pub record: RecordSettings,
     /// Previous contents of each slot, newest last (`None` = was empty).
     history: HashMap<usize, Vec<Option<Slot>>>,
     pub view: View,
@@ -112,6 +131,7 @@ impl AppState {
             trim: None,
             pitch: 0,
             transfer: TransferSettings::default(),
+            record: RecordSettings::default(),
             history: HashMap::new(),
             view: View::Samples,
             pattern: 0,

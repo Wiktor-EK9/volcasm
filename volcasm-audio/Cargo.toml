@@ -5,3 +5,9 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+cpal = { version = "0.18.2", features = ["pipewire"] }
+pipewire = "0.10"
+
+[dev-dependencies]
+hound = "3.5.1"
+volcasm-core = { path = "../volcasm-core" }

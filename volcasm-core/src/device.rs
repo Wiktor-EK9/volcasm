@@ -35,3 +35,11 @@ pub const VOLCA_SAMPLE: DeviceProfile = DeviceProfile {
         blocks: 1019,
     },
 };
+
+/// All supported device profiles.
+pub const PROFILES: [&DeviceProfile; 1] = [&VOLCA_SAMPLE];
+
+/// The profile with identifier `id`.
+pub fn profile(id: &str) -> Option<&'static DeviceProfile> {
+    PROFILES.into_iter().find(|p| p.id == id)
+}

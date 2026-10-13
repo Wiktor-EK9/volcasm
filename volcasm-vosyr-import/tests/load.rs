@@ -279,3 +279,95 @@ fn corrupt_projects_are_rejected() {
         Err(Error::SlotOutOfRange(100))
     ));
 }
+
+mod convert {
+    use std::io::Cursor;
+
+    use volcasm_core::pattern::Pattern;
+    use volcasm_core::project::{Target, file};
+    use volcasm_core::syro::{SyroItem, encode};
+
+    use super::*;
+
+    #[test]
+    fn test2_to_volcasm_and_back() {
+        let vosyr = project("Test2/Test2.vsj");
+        let (p, errors) = vosyr.to_project();
+        assert!(errors.is_empty(), "{errors:?}");
+        assert_eq!(p.name, "Test2");
+        assert_eq!(
+            p.slots()
+                .map(|(n, s)| (n, s.name.as_str()))
+                .collect::<Vec<_>>(),
+            [(0, "Samp1"), (24, "Samp2")]
+        );
+        for n in 1..=SEQUENCE_COUNT {
+            assert_eq!(
+                p.pattern(n - 1).unwrap().to_bytes(),
+                vosyr.sequence_bytes(n)
+            );
+        }
+
+        let mut bytes = Cursor::new(Vec::new());
+        file::write(&p, &mut bytes).unwrap();
+        let read = file::read(Cursor::new(bytes.into_inner())).unwrap();
+        assert_eq!(read, p);
+        for (n, slot) in read.slots() {
+            assert_eq!(slot.sample, vosyr.load_sample(n).unwrap());
+        }
+    }
+
+    /// A stream built from the `.volcasm` project equals one built directly
+    /// from the Vosyr files.
+    #[test]
+    fn stream_from_project_matches_direct() {
+        let vosyr = project("Test2/Test2.vsj");
+        let (p, _) = vosyr.to_project();
+        let mut bytes = Cursor::new(Vec::new());
+        file::write(&p, &mut bytes).unwrap();
+        let p = file::read(Cursor::new(bytes.into_inner())).unwrap();
+        let ours = encode(
+            &p.syro_items(
+                &[Target::Sample(0), Target::Sample(24), Target::Pattern(0)],
+                Some(16),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        let s0 = vosyr.load_sample(0).unwrap();
+        let s24 = vosyr.load_sample(24).unwrap();
+        let seq = vosyr.sequence_bytes(1);
+        let direct = encode(&[
+            SyroItem::SampleCompressed {
+                slot: 0,
+                pcm: &s0.pcm,
+                sample_rate: 31_250,
+                bits: 16,
+            },
+            SyroItem::SampleCompressed {
+                slot: 24,
+                pcm: &s24.pcm,
+                sample_rate: 31_250,
+                bits: 16,
+            },
+            SyroItem::Pattern {
+                index: 0,
+                data: &seq,
+            },
+        ])
+        .unwrap();
+        assert_eq!(ours, direct);
+    }
+
+    #[test]
+    fn test1_without_samples_keeps_patterns() {
+        // In a clean clone the Test1 WAVs are missing: slots stay empty and
+        // every missing sample is reported.
+        let vosyr = project("Test1/Test1.vsj");
+        let (p, errors) = vosyr.to_project();
+        assert_eq!(p.slots().count() + errors.len(), 25);
+        assert_eq!(p.pattern(3).unwrap().to_bytes(), vosyr.sequence_bytes(4));
+        assert_ne!(*p.pattern(0).unwrap(), Pattern::default());
+    }
+}

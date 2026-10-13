@@ -6,6 +6,7 @@
 //! are interpreted; everything else is kept byte for byte. The `.vsj` file
 //! itself has a variable layout and is kept raw (stage 11).
 
+pub mod convert;
 pub mod index;
 pub mod project;
 

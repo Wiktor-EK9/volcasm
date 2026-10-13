@@ -140,8 +140,9 @@ PITCH EG INT −63 -> 129, PITCH EG ATTACK 127 -> 255, PITCH EG DECAY 0 -> 128.
 Pełne zestawy wartości zgodne ze zrzutami: Test1 S1 P1 i S4 P8 (22/22).
 
 **Przesunięcie +128 (bit 7), ustalone na etapie 2:** README SDK podaje
-zakresy 0-127, a `VolcaSample_Pattern_Init` wpisuje surowe wartości
-(`7f 40 40 00 7f 40 00 7f 00 7f 7f`). Jednak fabryczne wzorce Korga
+zakresy 0-127 (PAN i PITCH EG INT 1-127), a dla SPEED dwa zakresy: 40-88
+(półtony) i 129-255 (tryb ciągły, 192 = środek). `VolcaSample_Pattern_Init`
+wpisuje surowe wartości (`7f 40 40 00 7f 40 00 7f 00 7f 7f`). Jednak fabryczne wzorce Korga
 (`pattern/preset_pattern_01..10.dat` w SDK) mają bit 7 ustawiony tak samo
 jak Vosyr (np. `7f ff c0 af 80 ff ...`). Domyślna część Vosyra to dokładnie
 `Init` + 0x80 na każdym bajcie `Param[]`. Kodowanie +128 jest więc zgodne
@@ -159,8 +160,10 @@ wybiera tryb.
 - bit 7 = 1: tryb ciągły, `bajt = 192 + wartość` (−63..+63);
 - bit 7 = 0: tryb półtonów, `bajt = 64 + półtony`. `0x4c` (+12) zabrzmiało
   oktawę wyżej niż `0xc0`, a `0xcc` (ciągły +12) tylko trochę wyżej.
-Zakres półtonów 40..88 (±24) pochodzi z README SDK, skrajne wartości
-nietestowane. Presety Korga używają obu trybów (np. preset 01, część 3:
+Oba tryby i ich zakresy (40..88 dla półtonów, 129..255 dla trybu ciągłego)
+opisuje README SDK (sekcja o `Param[]`), sprzęt to potwierdził. Skrajne
+wartości nietestowane. (Korekta 2026-10-13: wcześniej błędnie zapisano, że
+README podaje dla SPEED tylko 0-127.) Presety Korga używają obu trybów (np. preset 01, część 3:
 `0x40`).
 
 ### FuncMemoryPart (1 bajt @ +20), POTWIERDZONE w Test2
@@ -171,7 +174,7 @@ nietestowane. Presety Korga używają obu trybów (np. preset 01, część 3:
 | 1 | LOOP | P2: 0x12 |
 | 2 | REVERB | P3: 0x14 |
 | 3 | REVERSE | P4: 0x18 |
-| 4 | **1 = część gra**, 0 = wyciszona (MUTE zeruje bit) | domyślnie 0x10, P5 z MUTE: 0x00. Nazwa w SDK (`VOLCASAMPLE_FUNC_MUTE`) jest myląca. **POTWIERDZONE na sprzęcie** (wzorzec `t1_mute`: słychać tylko część z bitem 4 = 1) |
+| 4 | **1 = część gra**, 0 = wyciszona (MUTE zeruje bit) | domyślnie 0x10, P5 z MUTE: 0x00. README SDK opisuje to wprost: „Mute On/Off (1=mute off)”, choć sama stała nazywa się `VOLCASAMPLE_FUNC_MUTE`. **POTWIERDZONE na sprzęcie** (wzorzec `t1_mute`: słychać tylko część z bitem 4 = 1) |
 
 Flaga MOTION jest niezależna od danych: P7 i P8 mają dane motion przy
 FuncMemoryPart = 0x10 (MOTION wyłączony). Bity 5-7 nieobserwowane (zawsze 0).
@@ -179,6 +182,11 @@ FuncMemoryPart = 0x10 (MOTION wyłączony). Bity 5-7 nieobserwowane (zawsze 0).
 ### Motion[14][16] (224 B @ +32, do końca części)
 
 Bajt = `128 + wartość`, 0 = brak danych w kroku (UI pokazuje "-").
+Wyjątek według README SDK: wiersze SPEED (4 i 5) mają surową wartość
+pokrętła 0..127, bez +128 („speed: knob value (0~127), all other parameters:
+knob value +128, for all parameters, 0=no motion data”). Kodowanie SPEED
+w motion w plikach Vosyra nieobserwowane (test 8 w sekcji 6), na sprzęcie
+nietestowane.
 Adres: `+32 + wiersz*16 + (krok-1)`. Wiersz 14 x 16 kroków = dokładnie 224 B.
 
 Trzy zmierzone punkty, **POTWIERDZONE**:

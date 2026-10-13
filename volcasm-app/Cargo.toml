@@ -9,3 +9,9 @@ name = "volcasm"
 path = "src/main.rs"
 
 [dependencies]
+eframe = { version = "0.36.2", default-features = false, features = ["glow", "wayland", "x11", "accesskit"] }
+image = { version = "0.25.10", default-features = false, features = ["png"] }
+rfd = { version = "0.17.2", default-features = false, features = ["xdg-portal"] }
+volcasm-audio = { version = "0.1.0", path = "../volcasm-audio" }
+volcasm-core = { version = "0.1.0", path = "../volcasm-core" }
+volcasm-vosyr-import = { version = "0.1.0", path = "../volcasm-vosyr-import" }

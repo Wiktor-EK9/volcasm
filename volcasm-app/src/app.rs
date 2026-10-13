@@ -1,0 +1,660 @@
+//! The eframe application: layout, background jobs and side effects.
+
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::mpsc::{self, Receiver};
+use std::time::Duration;
+
+use eframe::egui::{self, ViewportCommand};
+use volcasm_audio::{OutputInfo, Phase, Preview, Transfer, TransferOptions};
+use volcasm_core::sample::{Sample, import};
+use volcasm_core::syro::{STREAM_SAMPLE_RATE, encode};
+
+use crate::state::{AppState, name_from_path};
+use crate::ui::slot_panel::{self, NameEdit, PanelAction};
+use crate::ui::slots::{self, SlotAction};
+use crate::ui::style;
+use crate::ui::transfer_panel::{self, Progress, TransferAction};
+
+/// Audio file extensions offered when loading a sample.
+const AUDIO_EXTENSIONS: [&str; 7] = ["wav", "aif", "aiff", "flac", "mp3", "ogg", "oga"];
+
+/// Options from the command line.
+#[derive(Debug, Default)]
+pub struct Options {
+    /// `.volcasm` or `.vsj` file to open at start.
+    pub open: Option<PathBuf>,
+    /// Slot to select at start.
+    pub select: Option<usize>,
+    /// Save a screenshot of the window to this file and quit (verification).
+    pub screenshot: Option<PathBuf>,
+}
+
+/// An action that discards unsaved changes, waiting for confirmation.
+#[derive(Debug, Clone)]
+enum Discarding {
+    New,
+    Open(PathBuf),
+    Import(PathBuf),
+    Quit,
+}
+
+struct ImportJob {
+    slot: usize,
+    name: String,
+    rx: Receiver<Result<Sample, String>>,
+}
+
+enum TransferJob {
+    Encoding(Receiver<Result<Vec<[i16; 2]>, String>>),
+    Running { transfer: Transfer, seconds: f64 },
+}
+
+struct Screenshot {
+    path: PathBuf,
+    frame: u32,
+    requested: bool,
+}
+
+pub struct VolcasmApp {
+    state: AppState,
+    /// Status messages, newest last; `true` = error.
+    messages: Vec<(bool, String)>,
+    /// Lines shown under the transfer button.
+    report: Vec<(bool, String)>,
+    discarding: Option<Discarding>,
+    imports: Vec<ImportJob>,
+    transfer: Option<TransferJob>,
+    preview: Option<(usize, Preview)>,
+    outputs: Result<Vec<OutputInfo>, String>,
+    name_edit: NameEdit,
+    screenshot: Option<Screenshot>,
+    allow_close: bool,
+    /// Window title last sent.
+    title: String,
+}
+
+impl VolcasmApp {
+    pub fn new(cc: &eframe::CreationContext<'_>, options: Options) -> Self {
+        style::install(&cc.egui_ctx);
+        let mut app = Self {
+            state: AppState::default(),
+            messages: Vec::new(),
+            report: Vec::new(),
+            discarding: None,
+            imports: Vec::new(),
+            transfer: None,
+            preview: None,
+            outputs: list_outputs(),
+            name_edit: NameEdit::default(),
+            screenshot: options.screenshot.map(|path| Screenshot {
+                path,
+                frame: 0,
+                requested: false,
+            }),
+            allow_close: false,
+            title: String::new(),
+        };
+        if let Some(path) = options.open {
+            app.open_any(&path);
+        }
+        if let Some(slot) = options.select {
+            app.state.select(slot);
+        }
+        app
+    }
+
+    fn info(&mut self, text: impl Into<String>) {
+        self.messages.push((false, text.into()));
+    }
+
+    fn error(&mut self, text: impl Into<String>) {
+        self.messages.push((true, text.into()));
+    }
+
+    /// Opens a `.volcasm` or imports a `.vsj`, by extension.
+    fn open_any(&mut self, path: &Path) {
+        let is_vsj = path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("vsj"));
+        if is_vsj {
+            self.import_vsj(path)
+        } else {
+            self.open(path)
+        }
+    }
+
+    fn open(&mut self, path: &Path) {
+        match AppState::open(path) {
+            Ok(state) => {
+                self.replace_state(state);
+                self.info(format!("{} {}", style::caps("Opened"), path.display()));
+            }
+            Err(err) => self.error(format!(
+                "{} {}: {err}",
+                style::caps("Cannot open"),
+                path.display()
+            )),
+        }
+    }
+
+    fn import_vsj(&mut self, path: &Path) {
+        match AppState::import_vsj(path) {
+            Ok((state, errors)) => {
+                self.replace_state(state);
+                self.info(format!("{} {}", style::caps("Imported"), path.display()));
+                for err in errors {
+                    self.error(err);
+                }
+            }
+            Err(err) => self.error(format!(
+                "{} {}: {err}",
+                style::caps("Cannot import"),
+                path.display()
+            )),
+        }
+    }
+
+    fn replace_state(&mut self, state: AppState) {
+        let transfer = self.state.transfer.clone();
+        self.state = state;
+        self.state.transfer = transfer;
+        self.preview = None;
+        self.report.clear();
+    }
+
+    /// Runs `action` now, or asks first if there are unsaved changes.
+    fn discard_then(&mut self, action: Discarding) {
+        if self.state.dirty {
+            self.discarding = Some(action);
+        } else {
+            self.discard(action);
+        }
+    }
+
+    fn discard(&mut self, action: Discarding) {
+        match action {
+            Discarding::New => {
+                self.replace_state(AppState::default());
+                self.info(style::caps("New project"));
+            }
+            Discarding::Open(path) => self.open(&path),
+            Discarding::Import(path) => self.import_vsj(&path),
+            Discarding::Quit => self.allow_close = true,
+        }
+    }
+
+    fn save(&mut self, choose: bool) {
+        let path = if choose || self.state.path.is_none() {
+            let name = format!("{}.volcasm", self.state.project.name);
+            match rfd::FileDialog::new()
+                .add_filter("Volcasm project", &["volcasm"])
+                .set_file_name(name)
+                .save_file()
+            {
+                Some(path) => Some(path.with_extension("volcasm")),
+                None => return,
+            }
+        } else {
+            None
+        };
+        match self.state.save(path.as_deref()) {
+            Ok(()) => {
+                let shown = self.state.path.as_ref().map(|p| p.display().to_string());
+                self.info(format!(
+                    "{} {}",
+                    style::caps("Saved"),
+                    shown.unwrap_or_default()
+                ));
+            }
+            Err(err) => self.error(format!("{}: {err}", style::caps("Cannot save"))),
+        }
+    }
+
+    /// Imports an audio file into `slot` in the background.
+    fn load_sample(&mut self, slot: usize, path: PathBuf) {
+        let rate = self.state.project.device().sample_rate;
+        let (tx, rx) = mpsc::channel();
+        let name = name_from_path(&path);
+        std::thread::spawn(move || {
+            let _ = tx.send(import::import_file(&path, rate).map_err(|e| e.to_string()));
+        });
+        self.info(format!("{} {name} → {slot}", style::caps("Loading")));
+        self.imports.push(ImportJob { slot, name, rx });
+    }
+
+    fn pick_sample(&mut self, slot: usize) {
+        if let Some(path) = rfd::FileDialog::new()
+            .add_filter("Audio", &AUDIO_EXTENSIONS)
+            .pick_file()
+        {
+            self.load_sample(slot, path);
+        }
+    }
+
+    fn poll_imports(&mut self) {
+        let mut done = Vec::new();
+        for (i, job) in self.imports.iter().enumerate() {
+            if let Ok(result) = job.rx.try_recv() {
+                done.push((i, result));
+            }
+        }
+        for (i, result) in done.into_iter().rev() {
+            let job = self.imports.remove(i);
+            match result
+                .and_then(|sample| self.state.set_sample(job.slot, job.name.clone(), sample))
+            {
+                Ok(()) => {
+                    self.info(format!(
+                        "{} {} → {}",
+                        style::caps("Loaded"),
+                        job.name,
+                        job.slot
+                    ));
+                    self.state.select(job.slot);
+                }
+                Err(err) => self.error(format!(
+                    "{} {}: {err}",
+                    style::caps("Cannot load"),
+                    job.name
+                )),
+            }
+        }
+    }
+
+    fn start_transfer(&mut self) {
+        let targets = self.state.transfer_targets();
+        if targets.is_empty() {
+            return;
+        }
+        self.preview = None;
+        self.report.clear();
+        let project = self.state.project.clone();
+        let bits = self.state.transfer.bits;
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let result = project
+                .syro_items(&targets, bits)
+                .map_err(|e| e.to_string())
+                .and_then(|items| encode(&items).map_err(|e| e.to_string()));
+            let _ = tx.send(result);
+        });
+        self.transfer = Some(TransferJob::Encoding(rx));
+    }
+
+    /// Advances the transfer job; returns its progress for display.
+    fn poll_transfer(&mut self) -> Option<Progress> {
+        match self.transfer.take()? {
+            TransferJob::Encoding(rx) => match rx.try_recv() {
+                Ok(Ok(frames)) => {
+                    let seconds = frames.len() as f64 / f64::from(STREAM_SAMPLE_RATE);
+                    let options = TransferOptions {
+                        device: self.state.transfer.device.clone(),
+                    };
+                    let transfer = volcasm_audio::start(frames, options);
+                    self.transfer = Some(TransferJob::Running { transfer, seconds });
+                    Some(progress("checking audio path", 0.0, seconds))
+                }
+                Ok(Err(err)) => {
+                    self.report.push((true, err));
+                    None
+                }
+                Err(mpsc::TryRecvError::Empty) => {
+                    self.transfer = Some(TransferJob::Encoding(rx));
+                    Some(progress("encoding", 0.0, 0.0))
+                }
+                Err(mpsc::TryRecvError::Disconnected) => None,
+            },
+            TransferJob::Running { transfer, seconds } => {
+                if transfer.phase() == Phase::Done {
+                    self.finish_transfer(transfer);
+                    return None;
+                }
+                let (sent, total) = transfer.progress();
+                let fraction = sent as f32 / total.max(1) as f32;
+                let phase = match transfer.phase() {
+                    Phase::Checking => "checking audio path",
+                    Phase::Sending => "sending",
+                    Phase::Draining | Phase::Done => "finishing",
+                };
+                let shown = progress(phase, fraction, seconds * f64::from(1.0 - fraction));
+                self.transfer = Some(TransferJob::Running { transfer, seconds });
+                Some(shown)
+            }
+        }
+    }
+
+    fn finish_transfer(&mut self, transfer: Transfer) {
+        match transfer.wait() {
+            Ok(report) => {
+                for warning in &report.warnings {
+                    self.report.push((false, warning.to_string()));
+                }
+                if report.xruns > 0 {
+                    self.report.push((
+                        true,
+                        style::caps(&format!(
+                            "{} buffer underruns: the transfer is likely corrupted",
+                            report.xruns
+                        )),
+                    ));
+                }
+                let text = style::caps(if report.cancelled {
+                    "Transfer cancelled"
+                } else {
+                    "Transfer done"
+                });
+                self.report.push((false, text.clone()));
+                self.info(text);
+            }
+            Err(err) => {
+                self.report.push((true, err.to_string()));
+                self.error(err.to_string());
+            }
+        }
+    }
+
+    fn toggle_preview(&mut self, slot: usize) {
+        if self.preview.as_ref().is_some_and(|(n, _)| *n == slot) {
+            self.preview = None;
+            return;
+        }
+        let Some(s) = self.state.project.slot(slot) else {
+            return;
+        };
+        let pcm: Arc<[i16]> = s.sample.pcm.clone().into();
+        match volcasm_audio::preview(pcm, s.sample.sample_rate) {
+            Ok(preview) => self.preview = Some((slot, preview)),
+            Err(err) => self.error(format!("{}: {err}", style::caps("Cannot play"))),
+        }
+    }
+
+    fn handle_dropped_files(&mut self, ctx: &egui::Context) {
+        let dropped: Vec<PathBuf> = ctx.input(|i| {
+            i.raw
+                .dropped_files
+                .iter()
+                .map(|f| f.path().to_path_buf())
+                .collect()
+        });
+        for path in dropped {
+            let ext = path
+                .extension()
+                .map(|e| e.to_string_lossy().to_lowercase())
+                .unwrap_or_default();
+            match ext.as_str() {
+                "volcasm" => self.discard_then(Discarding::Open(path)),
+                "vsj" => self.discard_then(Discarding::Import(path)),
+                _ => {
+                    let slot = self.state.selected.or_else(|| {
+                        (0..self.state.slot_count()).find(|&n| self.state.project.slot(n).is_none())
+                    });
+                    match slot {
+                        Some(slot) => self.load_sample(slot, path),
+                        None => self.error(style::caps("No free slot for the dropped file")),
+                    }
+                }
+            }
+        }
+    }
+
+    fn top_bar(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label(style::brand("volcasm", 30.0).color(style::ACCENT));
+            ui.add_space(12.0);
+            if ui.button(style::label("New")).clicked() {
+                self.discard_then(Discarding::New);
+            }
+            if ui.button(style::label("Open…")).clicked()
+                && let Some(path) = rfd::FileDialog::new()
+                    .add_filter("Volcasm project", &["volcasm"])
+                    .pick_file()
+            {
+                self.discard_then(Discarding::Open(path));
+            }
+            if ui.button(style::label("Save")).clicked() {
+                self.save(false);
+            }
+            if ui.button(style::label("Save as…")).clicked() {
+                self.save(true);
+            }
+            if ui.button(style::label("Import Vosyr…")).clicked()
+                && let Some(path) = rfd::FileDialog::new()
+                    .add_filter("Vosyr project", &["vsj"])
+                    .pick_file()
+            {
+                self.discard_then(Discarding::Import(path));
+            }
+            ui.add_space(16.0);
+            let name = format!(
+                "{}{}",
+                self.state.project.name,
+                if self.state.dirty { " *" } else { "" }
+            );
+            ui.label(style::brand(&name, 20.0));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                memory_bar(ui, &self.state);
+            });
+        });
+    }
+
+    fn status_bar(&self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| match self.messages.last() {
+            Some((true, text)) => {
+                ui.colored_label(style::ACCENT, text);
+            }
+            Some((false, text)) => {
+                ui.label(egui::RichText::new(text).color(style::TEXT_DIM));
+            }
+            None => {
+                ui.label(egui::RichText::new(style::caps("ready")).color(style::TEXT_DIM));
+            }
+        });
+    }
+
+    fn confirm_discard(&mut self, ctx: &egui::Context) {
+        let Some(action) = self.discarding.clone() else {
+            return;
+        };
+        let mut choice = None;
+        egui::Modal::new(egui::Id::new("discard")).show(ctx, |ui| {
+            ui.label(style::brand("unsaved changes", 20.0));
+            ui.label(style::label("Discard the changes in this project?"));
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                if ui.button(style::label("Discard")).clicked() {
+                    choice = Some(true);
+                }
+                if ui.button(style::label("Keep editing")).clicked() {
+                    choice = Some(false);
+                }
+            });
+        });
+        match choice {
+            Some(true) => {
+                self.discarding = None;
+                self.discard(action);
+                if self.allow_close {
+                    ctx.send_viewport_cmd(ViewportCommand::Close);
+                }
+            }
+            Some(false) => self.discarding = None,
+            None => {}
+        }
+    }
+
+    fn handle_close(&mut self, ctx: &egui::Context) {
+        if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close {
+            let busy = matches!(self.transfer, Some(TransferJob::Running { .. }));
+            if self.state.dirty || busy {
+                ctx.send_viewport_cmd(ViewportCommand::CancelClose);
+                self.discarding = Some(Discarding::Quit);
+            }
+        }
+    }
+
+    fn screenshot_step(&mut self, ctx: &egui::Context) {
+        let Some(shot) = &mut self.screenshot else {
+            return;
+        };
+        ctx.request_repaint();
+        shot.frame += 1;
+        if shot.frame == 10 && !shot.requested {
+            shot.requested = true;
+            ctx.send_viewport_cmd(ViewportCommand::Screenshot(Default::default()));
+        }
+        let image = ctx.input(|i| {
+            i.events.iter().find_map(|e| match e {
+                egui::Event::Screenshot { image, .. } => Some(image.clone()),
+                _ => None,
+            })
+        });
+        if let Some(image) = image {
+            let [w, h] = image.size;
+            let bytes: Vec<u8> = image.pixels.iter().flat_map(|c| c.to_array()).collect();
+            let result = image::RgbaImage::from_raw(w as u32, h as u32, bytes)
+                .ok_or_else(|| "invalid screenshot".to_string())
+                .and_then(|img| img.save(&shot.path).map_err(|e| e.to_string()));
+            match result {
+                Ok(()) => eprintln!("screenshot saved to {}", shot.path.display()),
+                Err(err) => eprintln!("screenshot failed: {err}"),
+            }
+            self.allow_close = true;
+            ctx.send_viewport_cmd(ViewportCommand::Close);
+        }
+    }
+}
+
+fn progress(phase: &'static str, fraction: f32, remaining_seconds: f64) -> Progress {
+    Progress {
+        phase,
+        fraction,
+        remaining_seconds,
+    }
+}
+
+fn list_outputs() -> Result<Vec<OutputInfo>, String> {
+    volcasm_audio::list_outputs().map_err(|e| format!("Cannot list audio outputs: {e}"))
+}
+
+fn memory_bar(ui: &mut egui::Ui, state: &AppState) {
+    let memory = state.memory();
+    let fraction = (memory.used_blocks as f32 / memory.total_blocks.max(1) as f32).min(1.0);
+    let text = format!(
+        "MEMORY {} / {} BLK · {:.2} MB",
+        memory.used_blocks,
+        memory.total_blocks,
+        memory.used_blocks as f64 * f64::from(state.project.device().memory.block_size) / 1e6
+    );
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(280.0, 22.0), egui::Sense::hover());
+    let painter = ui.painter_at(rect);
+    painter.rect_filled(rect, 3.0, style::BACKGROUND);
+    let mut fill = rect;
+    fill.set_width(rect.width() * fraction);
+    let color = if memory.fits() {
+        style::TILE_FILLED
+    } else {
+        style::ACCENT
+    };
+    painter.rect_filled(fill, 3.0, color);
+    painter.text(
+        rect.center(),
+        egui::Align2::CENTER_CENTER,
+        text,
+        style::body_font(14.0),
+        style::TEXT,
+    );
+}
+
+impl eframe::App for VolcasmApp {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
+        self.poll_imports();
+        self.handle_dropped_files(&ctx);
+        self.handle_close(&ctx);
+        if self.preview.as_ref().is_some_and(|(_, p)| p.finished()) {
+            self.preview = None;
+        }
+        let progress = self.poll_transfer();
+        if self.transfer.is_some() || !self.imports.is_empty() || self.preview.is_some() {
+            ctx.request_repaint_after(Duration::from_millis(100));
+        }
+        let title = self.state.title();
+        if self.title != title {
+            ctx.send_viewport_cmd(ViewportCommand::Title(title.clone()));
+            self.title = title;
+        }
+
+        egui::Panel::top("top").show(ui, |ui| {
+            ui.add_space(4.0);
+            self.top_bar(ui);
+            ui.add_space(4.0);
+        });
+        egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
+        egui::Panel::right("side")
+            .resizable(true)
+            .default_size(380.0)
+            .show(ui, |ui| {
+                ui.add_space(6.0);
+                let actions = slot_panel::show(ui, &mut self.state, &mut self.name_edit);
+                for action in actions {
+                    match action {
+                        PanelAction::LoadFile(slot) => self.pick_sample(slot),
+                        PanelAction::Clear(slot) => {
+                            if self.preview.as_ref().is_some_and(|(n, _)| *n == slot) {
+                                self.preview = None;
+                            }
+                            self.state.clear(slot);
+                        }
+                        PanelAction::ApplyTrim => {
+                            if let Err(err) = self.state.apply_trim() {
+                                self.error(err);
+                            }
+                        }
+                        PanelAction::Normalize => match self.state.normalize_selected() {
+                            Ok(gain) => {
+                                self.info(style::caps(&format!("Normalized, gain {gain:.2}")))
+                            }
+                            Err(err) => self.error(err),
+                        },
+                    }
+                }
+                ui.add_space(12.0);
+                ui.separator();
+                ui.add_space(6.0);
+                let actions = transfer_panel::show(
+                    ui,
+                    &mut self.state,
+                    &self.outputs,
+                    progress,
+                    &self.report,
+                );
+                for action in actions {
+                    match action {
+                        TransferAction::Send => self.start_transfer(),
+                        TransferAction::Cancel => {
+                            if let Some(TransferJob::Running { transfer, .. }) = &self.transfer {
+                                transfer.cancel();
+                            }
+                        }
+                        TransferAction::RefreshOutputs => self.outputs = list_outputs(),
+                    }
+                }
+            });
+        egui::CentralPanel::default().show(ui, |ui| {
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                let playing = self.preview.as_ref().map(|(n, _)| *n);
+                for action in slots::show(ui, &self.state, playing) {
+                    match action {
+                        SlotAction::Select(n) => self.state.select(n),
+                        SlotAction::ToggleChecked(n) => self.state.toggle_checked(n),
+                        SlotAction::Play(n) => self.toggle_preview(n),
+                    }
+                }
+            });
+        });
+
+        self.confirm_discard(&ctx);
+        self.screenshot_step(&ctx);
+    }
+}

@@ -202,6 +202,45 @@ impl AppState {
         std::iter::once(first).chain(free).take(count).collect()
     }
 
+    /// Moves the sample in `from` to `to`; a sample already in `to` goes
+    /// to `from` (the two swap). The transfer check mark and the undo
+    /// history follow the samples. Sequences keep their slot numbers.
+    /// Returns false when nothing moved.
+    pub fn move_slot(&mut self, from: usize, to: usize) -> bool {
+        let n = self.slot_count();
+        if from == to || from >= n || to >= n || self.project.slot(from).is_none() {
+            return false;
+        }
+        let moved = self.project.clear_slot(from).ok().flatten();
+        let other = self.project.clear_slot(to).ok().flatten();
+        // Both slots were valid before, so they still are.
+        if let Some(slot) = moved {
+            let _ = self.project.set_slot(to, slot);
+        }
+        if let Some(slot) = other {
+            let _ = self.project.set_slot(from, slot);
+        }
+        let (history_from, history_to) = (self.history.remove(&from), self.history.remove(&to));
+        if let Some(steps) = history_from {
+            self.history.insert(to, steps);
+        }
+        if let Some(steps) = history_to {
+            self.history.insert(from, steps);
+        }
+        let (checked_from, checked_to) = (self.checked.remove(&from), self.checked.remove(&to));
+        if checked_from {
+            self.checked.insert(to);
+        }
+        if checked_to {
+            self.checked.insert(from);
+        }
+        self.dirty = true;
+        self.samples_generation += 1;
+        self.selected = Some(to);
+        self.trim = None;
+        true
+    }
+
     /// Checks every slot, filled or empty.
     pub fn check_all(&mut self) {
         self.checked = (0..self.slot_count()).collect();
@@ -659,6 +698,31 @@ mod tests {
         assert!(s.pattern_warnings().is_empty());
         s.edit_pattern(("y", 0, 0), |p| p.set_active_steps(0));
         assert_eq!(s.pattern_warnings(), ["no active step"]);
+    }
+
+    #[test]
+    fn move_slot() {
+        let mut s = AppState::default();
+        s.set_sample(5, "a".into(), sample(&[1])).unwrap();
+        s.set_sample(6, "b".into(), sample(&[2, 2])).unwrap();
+        s.toggle_checked(5);
+        s.dirty = false;
+        // Onto a filled slot: the two swap.
+        assert!(s.move_slot(5, 6));
+        assert_eq!(s.project.slot(6).unwrap().name, "a");
+        assert_eq!(s.project.slot(5).unwrap().name, "b");
+        assert!(s.checked.contains(&6) && !s.checked.contains(&5));
+        assert_eq!(s.selected, Some(6));
+        assert!(s.dirty);
+        // Onto an empty slot: a plain move; undo history follows.
+        assert!(s.move_slot(6, 9));
+        assert!(s.project.slot(6).is_none());
+        assert_eq!(s.project.slot(9).unwrap().name, "a");
+        assert!(s.can_undo(9) && !s.can_undo(6));
+        // Nothing to move.
+        assert!(!s.move_slot(6, 7));
+        assert!(!s.move_slot(9, 9));
+        assert!(!s.move_slot(9, s.slot_count()));
     }
 
     #[test]

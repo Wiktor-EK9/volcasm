@@ -661,6 +661,37 @@ impl VolcasmApp {
         }
     }
 
+    /// A tile dragged onto another slot: move, or swap with a filled one.
+    fn move_slot(&mut self, from: usize, to: usize) {
+        // A loading file would land in the wrong slot.
+        if self
+            .imports
+            .iter()
+            .any(|job| job.slot == from || job.slot == to)
+        {
+            self.error(style::caps("Wait until the file has loaded"));
+            return;
+        }
+        let swap = self.state.project.slot(to).is_some();
+        if !self.state.move_slot(from, to) {
+            return;
+        }
+        // The preview follows its sample.
+        if let Some((slot, _)) = &mut self.preview {
+            if *slot == from {
+                *slot = to;
+            } else if *slot == to {
+                *slot = from;
+            }
+        }
+        let text = if swap {
+            format!("{} {from} ↔ {to}", style::caps("Swapped"))
+        } else {
+            format!("{} {from} → {to}", style::caps("Moved"))
+        };
+        self.info(text);
+    }
+
     fn handle_dropped_files(&mut self, ctx: &egui::Context) {
         let dropped: Vec<PathBuf> = ctx.input(|i| {
             i.raw
@@ -1263,6 +1294,7 @@ impl eframe::App for VolcasmApp {
                         SlotAction::Select(n) => self.state.select(n),
                         SlotAction::ToggleChecked(n) => self.state.toggle_checked(n),
                         SlotAction::Play(n) => self.toggle_preview(n),
+                        SlotAction::Move { from, to } => self.move_slot(from, to),
                     }
                 }
             });

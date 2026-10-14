@@ -1,7 +1,9 @@
 //! The grid of sample slots.
 
 use eframe::egui::text::{LayoutJob, TextWrapping};
-use eframe::egui::{self, Align2, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, vec2};
+use eframe::egui::{
+    self, Align2, CursorIcon, Id, LayerId, Order, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, vec2,
+};
 
 use super::style;
 use crate::state::AppState;
@@ -18,7 +20,15 @@ pub enum SlotAction {
     Select(usize),
     ToggleChecked(usize),
     Play(usize),
+    /// A tile dragged onto another slot.
+    Move {
+        from: usize,
+        to: usize,
+    },
 }
+
+/// Drag-and-drop payload: the slot being dragged.
+struct SlotDrag(usize);
 
 /// Draws all slots. `playing` is the slot being previewed and how much of
 /// it has played (0..1), if any.
@@ -42,7 +52,52 @@ pub fn show(ui: &mut Ui, state: &AppState, playing: Option<(usize, f32)>) -> Vec
         let progress = playing.filter(|(slot, _)| *slot == n).map(|(_, f)| f);
         tile(ui, state, n, rect, progress, &mut actions);
     }
+    drag_ghost(ui, state, tile_width);
     actions
+}
+
+/// While a tile is dragged: a small copy of it under the pointer.
+fn drag_ghost(ui: &Ui, state: &AppState, tile_width: f32) {
+    let Some(drag) = egui::DragAndDrop::payload::<SlotDrag>(ui.ctx()) else {
+        return;
+    };
+    let Some(pointer) = ui.ctx().pointer_interact_pos() else {
+        return;
+    };
+    ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
+    let n = drag.0;
+    let name = state
+        .project
+        .slot(n)
+        .map(|s| style::caps(&s.name))
+        .unwrap_or_default();
+    let rect = Rect::from_min_size(pointer + vec2(8.0, 8.0), vec2(tile_width, 34.0));
+    let painter = ui
+        .ctx()
+        .layer_painter(LayerId::new(Order::Tooltip, Id::new("slot-drag")));
+    painter.rect_filled(rect, 3.0, style::tile_filled().gamma_multiply(0.9));
+    painter.rect_stroke(
+        rect,
+        3.0,
+        Stroke::new(1.5, style::ACCENT),
+        StrokeKind::Inside,
+    );
+    let inner = rect.shrink(5.0);
+    let clip = painter.with_clip_rect(inner);
+    clip.text(
+        inner.left_top(),
+        Align2::LEFT_TOP,
+        n.to_string(),
+        style::body_font(12.0),
+        style::ACCENT,
+    );
+    clip.text(
+        inner.left_bottom(),
+        Align2::LEFT_BOTTOM,
+        name,
+        style::body_font(11.0),
+        style::text(),
+    );
 }
 
 fn tile(
@@ -54,10 +109,32 @@ fn tile(
     actions: &mut Vec<SlotAction>,
 ) {
     let slot = state.project.slot(n);
-    let response = ui.interact(rect, ui.id().with(("slot", n)), Sense::click());
+    // Filled tiles can be dragged onto another slot.
+    let sense = if slot.is_some() {
+        Sense::click_and_drag()
+    } else {
+        Sense::click()
+    };
+    let response = ui.interact(rect, ui.id().with(("slot", n)), sense);
     if response.clicked() {
         actions.push(SlotAction::Select(n));
     }
+    if slot.is_some() {
+        response.dnd_set_drag_payload(SlotDrag(n));
+    }
+    if let Some(drag) = response.dnd_release_payload::<SlotDrag>()
+        && drag.0 != n
+    {
+        actions.push(SlotAction::Move {
+            from: drag.0,
+            to: n,
+        });
+    }
+    let dragged = egui::DragAndDrop::payload::<SlotDrag>(ui.ctx());
+    let is_source = dragged.as_ref().is_some_and(|d| d.0 == n);
+    let is_target = response
+        .dnd_hover_payload::<SlotDrag>()
+        .is_some_and(|d| d.0 != n);
     if let Some(slot) = slot {
         let blocks = state
             .project
@@ -81,6 +158,12 @@ fn tile(
     } else {
         fill
     };
+    // The dragged tile fades while it is carried.
+    let fill = if is_source {
+        fill.gamma_multiply(0.5)
+    } else {
+        fill
+    };
     painter.rect_filled(rect, 3.0, fill);
     // Preview progress: a translucent bar filling the tile from the left.
     if let Some(fraction) = progress {
@@ -88,7 +171,16 @@ fn tile(
         bar.set_width(rect.width() * fraction.clamp(0.0, 1.0));
         painter.rect_filled(bar, 3.0, style::ACCENT.gamma_multiply(0.35));
     }
-    if state.selected == Some(n) {
+    if is_target {
+        // Where the dragged tile lands: a filled slot swaps with it.
+        painter.rect_filled(rect, 3.0, style::ACCENT.gamma_multiply(0.25));
+        painter.rect_stroke(
+            rect,
+            3.0,
+            Stroke::new(2.5, style::ACCENT),
+            StrokeKind::Inside,
+        );
+    } else if state.selected == Some(n) {
         painter.rect_stroke(
             rect,
             3.0,

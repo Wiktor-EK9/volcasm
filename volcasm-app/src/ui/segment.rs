@@ -2,7 +2,7 @@
 //! up/down arrows. Unlit segments show dimly behind the digits.
 
 use eframe::egui::{
-    Align2, Color32, CursorIcon, Id, Pos2, Rect, Sense, Shape, Stroke, Ui, Vec2, vec2,
+    Align2, Color32, CursorIcon, Id, Pos2, Rect, Sense, Shape, Stroke, StrokeKind, Ui, Vec2, vec2,
 };
 
 use super::style;
@@ -11,6 +11,13 @@ use super::style;
 const UNLIT: Color32 = Color32::from_rgb(0x2c, 0x15, 0x13);
 const ARROW: Color32 = Color32::from_rgb(0x42, 0x1c, 0x18);
 const PANEL: Color32 = Color32::from_rgb(0x14, 0x12, 0x13);
+/// Background while hovered and while pressed or dragged: like a button.
+const PANEL_HOVER: Color32 = Color32::from_rgb(0x1e, 0x1a, 0x1b);
+const PANEL_ACTIVE: Color32 = Color32::from_rgb(0x26, 0x1e, 0x1e);
+/// Stronger steps for the light theme, where the dark display stands out
+/// less from its own changes.
+const PANEL_HOVER_LIGHT: Color32 = Color32::from_rgb(0x2c, 0x25, 0x26);
+const PANEL_ACTIVE_LIGHT: Color32 = Color32::from_rgb(0x3a, 0x2a, 0x2a);
 /// Value change per dragged point.
 const DRAG_SPEED: f32 = 0.25;
 
@@ -56,7 +63,9 @@ pub fn show(ui: &mut Ui, id: Id, value: i32, spec: SegmentSpec, hint: &str) -> O
     );
     let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
     let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, spec.height * 0.15, PANEL);
+    let radius = spec.height * 0.15;
+    // Filled in at the end, once hover and press are known.
+    let background = painter.add(Shape::Noop);
 
     // Digits: unlit "8"s, then the value on top.
     let digits_rect = Rect::from_min_size(
@@ -96,6 +105,7 @@ pub fn show(ui: &mut Ui, id: Id, value: i32, spec: SegmentSpec, hint: &str) -> O
         new = spec.default;
     }
     let hovered = display.hovered();
+    let mut active = display.dragged() || display.is_pointer_button_down_on();
 
     // Arrows, stacked on the right.
     let arrows = Rect::from_min_max(
@@ -113,6 +123,10 @@ pub fn show(ui: &mut Ui, id: Id, value: i32, spec: SegmentSpec, hint: &str) -> O
         if response.clicked() {
             new += if up { 1 } else { -1 };
         }
+        if response.hovered() {
+            ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
+        }
+        active |= response.is_pointer_button_down_on();
         let color = if response.is_pointer_button_down_on() {
             style::ACCENT
         } else if response.hovered() {
@@ -136,6 +150,39 @@ pub fn show(ui: &mut Ui, id: Id, value: i32, spec: SegmentSpec, hint: &str) -> O
             ui.input_mut(|i| i.smooth_scroll_delta = Vec2::ZERO);
         }
     }
+    // Button-like feedback: lighter when hovered, red outline while pressed
+    // or dragged.
+    let over = ui.rect_contains_pointer(rect);
+    // On the light theme the display stays dark, so a thin inner outline
+    // barely shows: there it is thicker, darker and drawn outside the box.
+    let light = style::is_light();
+    let fill = match (active, over, light) {
+        (true, _, false) => PANEL_ACTIVE,
+        (true, _, true) => PANEL_ACTIVE_LIGHT,
+        (false, true, false) => PANEL_HOVER,
+        (false, true, true) => PANEL_HOVER_LIGHT,
+        (false, false, _) => PANEL,
+    };
+    // Leave room for the outside outline within the widget's own area,
+    // which is the painter's clip rect.
+    let panel = if light { rect.shrink(2.0) } else { rect };
+    painter.set(background, Shape::rect_filled(panel, radius, fill));
+    let (width, kind) = if light {
+        (2.0, StrokeKind::Outside)
+    } else {
+        (1.0, StrokeKind::Inside)
+    };
+    if active {
+        painter.rect_stroke(panel, radius, Stroke::new(width + 0.5, style::ACCENT), kind);
+    } else if over {
+        let color = if light {
+            style::text()
+        } else {
+            style::text_dim()
+        };
+        painter.rect_stroke(panel, radius, Stroke::new(width, color), kind);
+    }
+
     let response = ui.interact(rect, id.with("hint"), Sense::hover());
     response.on_hover_text(style::caps(&format!(
         "{hint} · {}..{} · drag, scroll or arrows · double-click: {}",

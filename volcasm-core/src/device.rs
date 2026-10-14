@@ -20,6 +20,16 @@ pub struct DeviceProfile {
     pub memory: MemoryLayout,
 }
 
+impl DeviceProfile {
+    /// Longest total sample time that fits the memory, in seconds (16-bit
+    /// mono at the device rate, ignoring block rounding).
+    pub fn max_sample_seconds(&self) -> f64 {
+        self.memory.capacity_bytes() as f64
+            / crate::memory::BYTES_PER_FRAME as f64
+            / f64::from(self.sample_rate)
+    }
+}
+
 /// KORG volca sample (first generation).
 ///
 /// Memory capacity was measured on hardware (`docs/hardware.md`): 1019
@@ -42,4 +52,16 @@ pub const PROFILES: [&DeviceProfile; 1] = [&VOLCA_SAMPLE];
 /// The profile with identifier `id`.
 pub fn profile(id: &str) -> Option<&'static DeviceProfile> {
     PROFILES.into_iter().find(|p| p.id == id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn volca_sample_holds_about_67_seconds() {
+        // 1019 blocks × 4096 B / 2 B / 31 250 Hz.
+        let seconds = VOLCA_SAMPLE.max_sample_seconds();
+        assert!((seconds - 66.781_184).abs() < 1e-6, "{seconds}");
+    }
 }

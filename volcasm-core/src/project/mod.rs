@@ -165,6 +165,14 @@ impl Project {
         Ok(())
     }
 
+    /// Total duration of all samples, in seconds.
+    pub fn total_duration(&self) -> f64 {
+        // fold from +0.0: an empty f64 sum would be -0.0 ("-0.00" on screen).
+        self.slots()
+            .map(|(_, slot)| slot.sample.duration())
+            .fold(0.0, |a, b| a + b)
+    }
+
     /// Device memory taken by all samples.
     pub fn memory_usage(&self) -> MemoryUsage {
         self.device
@@ -245,6 +253,7 @@ mod tests {
     #[test]
     fn new_project_is_empty() {
         let p = Project::new(&VOLCA_SAMPLE, "x");
+        assert!(p.total_duration().is_sign_positive());
         assert_eq!(p.slots().count(), 0);
         assert_eq!(p.patterns().len(), 10);
         assert_eq!(p.memory_usage().used_blocks, 0);
@@ -273,6 +282,7 @@ mod tests {
         );
         p.set_slot(7, slot(sample(4097))).unwrap();
         assert_eq!(p.memory_usage().used_blocks, 3);
+        assert_eq!(p.total_duration(), 4097.0 / 31_250.0);
         assert!(p.clear_slot(7).unwrap().is_some());
         assert_eq!(p.slots().count(), 0);
     }

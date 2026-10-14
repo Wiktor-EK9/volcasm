@@ -72,9 +72,9 @@ fn tile(
     }
     let painter = ui.painter_at(rect);
     let fill = if slot.is_some() {
-        style::TILE_FILLED
+        style::tile_filled()
     } else {
-        style::TILE_EMPTY
+        style::tile_empty()
     };
     let fill = if response.hovered() {
         fill.gamma_multiply(1.15)
@@ -98,7 +98,7 @@ fn tile(
     }
 
     let inner = rect.shrink(5.0);
-    let dim = style::TEXT_DIM;
+    let dim = style::text_dim();
     let text_painter = ui.painter_at(inner);
     text_painter.text(
         inner.left_top(),
@@ -112,7 +112,7 @@ fn tile(
         let mut job = LayoutJob::simple(
             style::caps(&slot.name),
             style::body_font(12.0),
-            style::TEXT,
+            style::text(),
             inner.width(),
         );
         job.wrap = TextWrapping {
@@ -125,7 +125,7 @@ fn tile(
         text_painter.galley(
             Pos2::new(inner.left(), inner.top() + 15.0),
             galley,
-            style::TEXT,
+            style::text(),
         );
         // Top line, right of the slot number: the bottom row holds the
         // check box and play button.
@@ -172,7 +172,7 @@ fn tile(
         let color = if playing || play_response.hovered() {
             style::ACCENT
         } else {
-            style::TEXT
+            style::text()
         };
         if playing {
             painter.rect_filled(play.shrink(4.0), 1.0, color);

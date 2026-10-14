@@ -6,10 +6,12 @@ use eframe::egui::{self, Align2, Id, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, 
 use volcasm_core::pattern::{Func, PARTS, Param, Pattern, STEPS, Speed};
 
 use super::knob::{self, KnobSpec};
-use super::{motion, style};
+use super::{motion, segment, style};
 use crate::state::{AppState, PartView};
 
 const STEP_SIZE: f32 = 28.0;
+/// Height of the PLAY button and the tempo display beside it.
+const PLAY_HEIGHT: f32 = 30.0;
 /// Fixed width of the sample list, so the buttons after it line up.
 const SAMPLE_COMBO_WIDTH: f32 = 260.0;
 const STEP_GAP: f32 = 3.0;
@@ -62,7 +64,7 @@ pub fn show(ui: &mut Ui, state: &mut AppState, transport: &Transport) {
 pub fn sidebar(ui: &mut Ui, state: &mut AppState, transport: &Transport) -> bool {
     sequence_choice(ui, state);
     for issue in state.pattern_warnings() {
-        ui.colored_label(style::WARNING, issue);
+        ui.colored_label(style::warning(), issue);
     }
     ui.add_space(10.0);
     let toggled = play_and_tempo(ui, state, transport);
@@ -119,39 +121,46 @@ fn sequence_choice(ui: &mut Ui, state: &mut AppState) {
 
 fn play_and_tempo(ui: &mut Ui, state: &mut AppState, transport: &Transport) -> bool {
     let mut toggled = false;
-    ui.horizontal(|ui| {
-        let (text, fill) = if transport.playing {
-            ("stop", style::ACCENT)
-        } else {
-            ("play", style::TILE_FILLED)
-        };
-        let button = egui::Button::new(egui::RichText::new(style::caps(text)).size(18.0))
-            .fill(fill)
-            .min_size(egui::vec2(90.0, 30.0));
-        if ui
-            .add_enabled(transport.can_play || transport.playing, button)
-            .on_hover_text(style::caps(
-                "preview on the computer, an approximation of the volca",
-            ))
-            .on_disabled_hover_text(style::caps("not during a transfer"))
-            .clicked()
-        {
-            toggled = true;
-        }
-        ui.label(style::label("Tempo"));
-        let mut tempo = state.project.tempo;
-        let range = volcasm_core::project::TEMPO_RANGE;
-        let response = ui.add(egui::DragValue::new(&mut tempo).range(range).suffix(" BPM"));
-        // Dragging up or down changes the tempo (as in DAWs); show that
-        // instead of egui's horizontal cursor.
-        if response.hovered() || response.dragged() {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
-        }
-        if response.changed() {
-            state.project.tempo = tempo;
-            state.dirty = true;
-        }
-    });
+    // A row as tall as the display, with everything centered in it.
+    ui.allocate_ui_with_layout(
+        egui::vec2(ui.available_width(), PLAY_HEIGHT),
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            let (text, fill) = if transport.playing {
+                ("stop", style::ACCENT)
+            } else {
+                ("play", style::tile_filled())
+            };
+            let button = egui::Button::new(egui::RichText::new(style::caps(text)).size(18.0))
+                .fill(fill)
+                .min_size(egui::vec2(90.0, PLAY_HEIGHT));
+            if ui
+                .add_enabled(transport.can_play || transport.playing, button)
+                .on_hover_text(style::caps(
+                    "preview on the computer, an approximation of the volca",
+                ))
+                .on_disabled_hover_text(style::caps("not during a transfer"))
+                .clicked()
+            {
+                toggled = true;
+            }
+            ui.label(style::label("Tempo"));
+            let range = volcasm_core::project::TEMPO_RANGE;
+            let spec = segment::SegmentSpec {
+                min: (*range.start()).into(),
+                max: (*range.end()).into(),
+                default: volcasm_core::project::DEFAULT_TEMPO.into(),
+                digits: 3,
+                // Same height as the PLAY button next to it.
+                height: PLAY_HEIGHT,
+            };
+            let tempo = i32::from(state.project.tempo);
+            if let Some(t) = segment::show(ui, Id::new("tempo"), tempo, spec, "tempo, bpm") {
+                state.project.tempo = t as u16;
+                state.dirty = true;
+            }
+        },
+    );
     toggled
 }
 
@@ -159,7 +168,7 @@ fn part_row(ui: &mut Ui, state: &mut AppState, i: usize, playhead: Option<usize>
     let pattern = *state.current_pattern();
     let part = pattern.part(i);
     let frame = egui::Frame::new()
-        .fill(style::TILE_EMPTY)
+        .fill(style::tile_empty())
         .corner_radius(3.0)
         .inner_margin(6.0)
         .show(ui, |ui| {
@@ -424,21 +433,21 @@ fn step_row(
         let fill = match (on, enabled) {
             (true, true) => style::ACCENT,
             (true, false) => style::ACCENT.gamma_multiply(0.35),
-            (false, _) => style::BACKGROUND,
+            (false, _) => style::background(),
         };
         painter.rect_filled(cell, 3.0, fill);
         // Beats of four, as on the device's step buttons.
         let stroke = if index % 4 == 0 {
-            style::TEXT_DIM
+            style::text_dim()
         } else {
-            style::TILE_FILLED
+            style::tile_filled()
         };
         painter.rect_stroke(cell, 3.0, Stroke::new(1.0, stroke), StrokeKind::Inside);
         if playhead == Some(index + 1) {
             painter.rect_stroke(
                 cell,
                 3.0,
-                Stroke::new(2.5, style::TEXT),
+                Stroke::new(2.5, style::text()),
                 StrokeKind::Outside,
             );
         }
@@ -447,7 +456,7 @@ fn step_row(
             Align2::CENTER_CENTER,
             (index + 1).to_string(),
             style::body_font(12.0),
-            if on { style::TEXT } else { style::TEXT_DIM },
+            if on { style::text() } else { style::text_dim() },
         );
     }
     (new != bits).then_some((new, started))

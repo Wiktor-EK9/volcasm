@@ -61,7 +61,7 @@ pub fn show(ui: &mut Ui, id: usize, part: &Part, row: &mut MotionRow) -> Option<
         ui.label(
             egui::RichText::new(style::caps(hint))
                 .small()
-                .color(style::TEXT_DIM),
+                .color(style::text_dim()),
         );
     });
 
@@ -76,13 +76,13 @@ pub fn show(ui: &mut Ui, id: usize, part: &Part, row: &mut MotionRow) -> Option<
             Pos2::new(x + 1.0, rect.top()),
             vec2(bar_width - 2.0, BAR_HEIGHT),
         );
-        painter.rect_filled(column, 2.0, style::BACKGROUND);
+        painter.rect_filled(column, 2.0, style::background());
         painter.text(
             Pos2::new(column.center().x, column.bottom() + 2.0),
             Align2::CENTER_TOP,
             step.to_string(),
             style::body_font(11.0),
-            style::TEXT_DIM,
+            style::text_dim(),
         );
         let raw = part.raw_motion(*row, step);
         match (range, part.motion(*row, step)) {
@@ -99,7 +99,7 @@ pub fn show(ui: &mut Ui, id: usize, part: &Part, row: &mut MotionRow) -> Option<
                     Align2::CENTER_TOP,
                     value.to_string(),
                     style::body_font(11.0),
-                    style::TEXT,
+                    style::text(),
                 );
             }
             (None, _) if raw != 0 => {
@@ -108,7 +108,7 @@ pub fn show(ui: &mut Ui, id: usize, part: &Part, row: &mut MotionRow) -> Option<
                     Align2::CENTER_CENTER,
                     raw.to_string(),
                     style::body_font(11.0),
-                    style::TEXT,
+                    style::text(),
                 );
             }
             _ => {
@@ -117,7 +117,7 @@ pub fn show(ui: &mut Ui, id: usize, part: &Part, row: &mut MotionRow) -> Option<
                     Align2::CENTER_CENTER,
                     "-",
                     style::body_font(13.0),
-                    style::TEXT_DIM,
+                    style::text_dim(),
                 );
             }
         }
@@ -133,7 +133,7 @@ pub fn show(ui: &mut Ui, id: usize, part: &Part, row: &mut MotionRow) -> Option<
             painter.rect_stroke(
                 column,
                 2.0,
-                Stroke::new(1.0, style::TEXT_DIM),
+                Stroke::new(1.0, style::text_dim()),
                 StrokeKind::Inside,
             );
         }

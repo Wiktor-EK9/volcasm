@@ -53,7 +53,7 @@ pub fn show(
         Align2::CENTER_TOP,
         style::caps(label),
         style::body_font(10.5),
-        style::TEXT_DIM,
+        style::text_dim(),
     );
     let center = Pos2::new(rect.center().x, rect.top() + 18.0 + RADIUS + 2.0);
 
@@ -73,7 +73,7 @@ pub fn show(
     let active = response.hovered() || response.dragged();
     painter.add(Shape::line(
         arc(-SWEEP, SWEEP),
-        Stroke::new(3.0, style::BACKGROUND),
+        Stroke::new(3.0, style::background()),
     ));
     let start = if spec.bipolar { 0.0 } else { -SWEEP };
     let end = angle_of(value);
@@ -85,14 +85,14 @@ pub fn show(
     painter.add(Shape::line(arc(from, to), Stroke::new(3.0, style::ACCENT)));
     painter.line_segment(
         [point(end, RADIUS - 9.0), point(end, RADIUS + 1.0)],
-        Stroke::new(2.0, if active { style::TEXT } else { style::ACCENT }),
+        Stroke::new(2.0, if active { style::text() } else { style::ACCENT }),
     );
     painter.text(
         center,
         Align2::CENTER_CENTER,
         value.to_string(),
         style::body_font(13.0),
-        style::TEXT,
+        style::text(),
     );
 
     let mut new = value as f32;
@@ -130,7 +130,7 @@ pub fn show(
             style::caps(text),
             style::body_font(10.5),
             if footer_response.hovered() {
-                style::TEXT
+                style::text()
             } else {
                 style::ACCENT
             },

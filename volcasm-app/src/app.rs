@@ -11,7 +11,9 @@ use volcasm_core::sample::{Sample, import};
 use volcasm_core::syro::{STREAM_SAMPLE_RATE, encode};
 
 use crate::preview::SequencePreview;
+use crate::settings::{self, Settings};
 use crate::state::{AppState, PartView, View, name_from_path};
+use crate::ui::menu::{self, MenuAction};
 use crate::ui::record_panel::{self, RecordAction};
 use crate::ui::sequences;
 use crate::ui::slot_panel::{self, NameEdit, PanelAction};
@@ -41,6 +43,10 @@ pub struct Options {
     pub pattern: Option<usize>,
     /// Parts (0-based) to show with knobs or the motion editor.
     pub expand: Vec<(usize, PartView)>,
+    /// Theme for this run only (light = true); not saved.
+    pub theme: Option<bool>,
+    /// Start with the menu open.
+    pub menu: bool,
 }
 
 /// An action that discards unsaved changes, waiting for confirmation.
@@ -94,6 +100,8 @@ pub struct VolcasmApp {
     name_edit: NameEdit,
     /// Project name being edited in the top bar.
     name_draft: Option<String>,
+    settings: Settings,
+    menu_open: bool,
     screenshot: Option<Screenshot>,
     allow_close: bool,
     /// Window title last sent.
@@ -102,7 +110,26 @@ pub struct VolcasmApp {
 
 impl VolcasmApp {
     pub fn new(cc: &eframe::CreationContext<'_>, options: Options) -> Self {
-        style::install(&cc.egui_ctx);
+        let mut settings = Settings::load();
+        if let Some(light) = options.theme {
+            // For this run only: kept in memory, never saved.
+            settings.theme = Some(if light {
+                settings::Theme::Light
+            } else {
+                settings::Theme::Dark
+            });
+        }
+        match settings.theme {
+            Some(theme) => style::install(&cc.egui_ctx, theme == settings::Theme::Light),
+            None => match settings::system_prefers_light() {
+                // Read from the desktop (winit cannot on Wayland).
+                Some(light) => style::install(&cc.egui_ctx, light),
+                None => {
+                    style::install(&cc.egui_ctx, false);
+                    style::follow_system(&cc.egui_ctx);
+                }
+            },
+        }
         let mut app = Self {
             state: AppState::default(),
             messages: Vec::new(),
@@ -117,6 +144,8 @@ impl VolcasmApp {
             inputs: list_inputs(),
             name_edit: NameEdit::default(),
             name_draft: None,
+            settings,
+            menu_open: options.menu,
             screenshot: options.screenshot.map(|path| Screenshot {
                 path,
                 frame: 0,
@@ -408,8 +437,7 @@ impl VolcasmApp {
     fn start_recording(&mut self, slot: usize) {
         let device = self.state.project.device();
         // Longer would not fit into the device memory anyway.
-        let max_seconds =
-            device.memory.capacity_bytes() as f64 / 2.0 / f64::from(device.sample_rate);
+        let max_seconds = device.max_sample_seconds();
         match Recorder::start(self.state.record.input.as_deref(), max_seconds) {
             Ok(recorder) => {
                 self.recording = Some(ActiveRecording {
@@ -529,8 +557,21 @@ impl VolcasmApp {
     }
 
     fn top_bar(&mut self, ui: &mut egui::Ui) {
+        let mut wrapped = true;
         ui.horizontal(|ui| {
-            ui.label(style::brand("volcasm", 30.0).color(style::ACCENT));
+            // The logo opens the menu.
+            let logo = ui
+                .add(
+                    egui::Label::new(style::brand("volcasm", 30.0).color(style::ACCENT))
+                        .sense(egui::Sense::click()),
+                )
+                .on_hover_text(style::caps("menu"));
+            if logo.hovered() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+            }
+            if logo.clicked() {
+                self.menu_open = true;
+            }
             ui.add_space(8.0);
             self.project_name(ui);
             ui.add_space(12.0);
@@ -541,35 +582,22 @@ impl VolcasmApp {
                 }
             }
             ui.add_space(12.0);
-            if ui.button(style::label("New")).clicked() {
-                self.discard_then(Discarding::New);
-            }
-            if ui.button(style::label("Open…")).clicked()
-                && let Some(path) = rfd::FileDialog::new()
-                    .add_filter("Volcasm or Vosyr project", &["volcasm", "vsj"])
-                    .add_filter("Volcasm project", &["volcasm"])
-                    .add_filter("Vosyr project", &["vsj"])
-                    .pick_file()
-            {
-                let is_vsj = path
-                    .extension()
-                    .is_some_and(|e| e.eq_ignore_ascii_case("vsj"));
-                self.discard_then(if is_vsj {
-                    Discarding::Import(path)
-                } else {
-                    Discarding::Open(path)
+            // Meters beside the buttons when they fit, else on a second line.
+            if ui.available_width() >= METERS_WIDTH {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    meters(ui, &self.state);
                 });
+                wrapped = false;
             }
-            if ui.button(style::label("Save")).clicked() {
-                self.save(false);
-            }
-            if ui.button(style::label("Save as…")).clicked() {
-                self.save(true);
-            }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                memory_bar(ui, &self.state);
-            });
         });
+        if wrapped {
+            ui.add_space(4.0);
+            ui.allocate_ui_with_layout(
+                egui::vec2(ui.available_width(), 24.0),
+                egui::Layout::right_to_left(egui::Align::Center),
+                |ui| meters(ui, &self.state),
+            );
+        }
     }
 
     /// Project name: click to edit, Enter or clicking away to keep, Esc to
@@ -613,16 +641,56 @@ impl VolcasmApp {
         }
     }
 
+    /// Asks for a `.volcasm` or `.vsj` file and opens it.
+    fn open_dialog(&mut self) {
+        if let Some(path) = rfd::FileDialog::new()
+            .add_filter("Volcasm or Vosyr project", &["volcasm", "vsj"])
+            .add_filter("Volcasm project", &["volcasm"])
+            .add_filter("Vosyr project", &["vsj"])
+            .pick_file()
+        {
+            let is_vsj = path
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("vsj"));
+            self.discard_then(if is_vsj {
+                Discarding::Import(path)
+            } else {
+                Discarding::Open(path)
+            });
+        }
+    }
+
+    fn menu(&mut self, ctx: &egui::Context) {
+        match menu::show(ctx, &mut self.menu_open) {
+            Some(MenuAction::New) => self.discard_then(Discarding::New),
+            Some(MenuAction::Open) => self.open_dialog(),
+            Some(MenuAction::Save) => self.save(false),
+            Some(MenuAction::SaveAs) => self.save(true),
+            Some(MenuAction::Theme(light)) => {
+                style::set_light(ctx, light);
+                self.settings.theme = Some(if light {
+                    settings::Theme::Light
+                } else {
+                    settings::Theme::Dark
+                });
+                if let Err(err) = self.settings.save() {
+                    self.error(format!("{}: {err}", style::caps("Cannot save settings")));
+                }
+            }
+            None => {}
+        }
+    }
+
     fn status_bar(&self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| match self.messages.last() {
             Some((true, text)) => {
                 ui.colored_label(style::ACCENT, text);
             }
             Some((false, text)) => {
-                ui.label(egui::RichText::new(text).color(style::TEXT_DIM));
+                ui.label(egui::RichText::new(text).color(style::text_dim()));
             }
             None => {
-                ui.label(egui::RichText::new(style::caps("ready")).color(style::TEXT_DIM));
+                ui.label(egui::RichText::new(style::caps("ready")).color(style::text_dim()));
             }
         });
     }
@@ -716,24 +784,42 @@ fn list_outputs() -> Result<Vec<OutputInfo>, String> {
     volcasm_audio::list_outputs().map_err(|e| format!("Cannot list audio outputs: {e}"))
 }
 
-fn memory_bar(ui: &mut egui::Ui, state: &AppState) {
+/// Width the two meters need side by side.
+const METERS_WIDTH: f32 = 2.0 * METER_WIDTH + 16.0;
+const METER_WIDTH: f32 = 228.0;
+
+/// The memory and duration meters, right-aligned in the top bar.
+fn meters(ui: &mut egui::Ui, state: &AppState) {
+    let width = METER_WIDTH;
+    let device = state.project.device();
+
     let memory = state.memory();
-    let fraction = (memory.used_blocks as f32 / memory.total_blocks.max(1) as f32).min(1.0);
     let text = format!(
         "MEMORY {} / {} BLK · {:.2} MB",
         memory.used_blocks,
         memory.total_blocks,
-        memory.used_blocks as f64 * f64::from(state.project.device().memory.block_size) / 1e6
+        memory.used_blocks as f64 * f64::from(device.memory.block_size) / 1e6
     );
-    // Narrower in small windows instead of covering the buttons.
-    let width = ui.available_width().clamp(120.0, 280.0);
+    let fraction = memory.used_blocks as f32 / memory.total_blocks.max(1) as f32;
+    meter(ui, width, fraction, &text, memory.fits());
+
+    // The memory meter decides what fits (blocks round up), so the duration
+    // meter only turns red with it.
+    let seconds = state.project.total_duration();
+    let max = device.max_sample_seconds();
+    let text = format!("DURATION {seconds:.2} / {max:.1} S");
+    meter(ui, width, (seconds / max) as f32, &text, memory.fits());
+}
+
+/// A horizontal bar with centered text; red when `ok` is false.
+fn meter(ui: &mut egui::Ui, width: f32, fraction: f32, text: &str, ok: bool) {
     let (rect, _) = ui.allocate_exact_size(egui::vec2(width, 22.0), egui::Sense::hover());
     let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, 3.0, style::BACKGROUND);
+    painter.rect_filled(rect, 3.0, style::background());
     let mut fill = rect;
-    fill.set_width(rect.width() * fraction);
-    let color = if memory.fits() {
-        style::TILE_FILLED
+    fill.set_width(rect.width() * fraction.clamp(0.0, 1.0));
+    let color = if ok {
+        style::tile_filled()
     } else {
         style::ACCENT
     };
@@ -743,13 +829,18 @@ fn memory_bar(ui: &mut egui::Ui, state: &AppState) {
         egui::Align2::CENTER_CENTER,
         text,
         style::body_font(14.0),
-        style::TEXT,
+        style::text(),
     );
 }
 
 impl eframe::App for VolcasmApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        if self.settings.theme.is_none() && ctx.system_theme().is_some() {
+            // No saved choice and the window system reports the theme:
+            // follow it as it changes.
+            style::sync_theme(&ctx);
+        }
         self.poll_imports();
         self.handle_dropped_files(&ctx);
         self.handle_close(&ctx);
@@ -800,93 +891,108 @@ impl eframe::App for VolcasmApp {
             .resizable(true)
             .default_size(380.0)
             .show(ui, |ui| {
-                ui.add_space(6.0);
-                if self.state.view == View::Sequences
-                    && sequences::sidebar(ui, &mut self.state, &transport)
-                {
-                    play_toggled = true;
-                }
-                let actions = if self.state.view == View::Samples {
-                    slot_panel::show(ui, &mut self.state, &mut self.name_edit)
-                } else {
-                    Vec::new()
-                };
-                for action in actions {
-                    match action {
-                        PanelAction::LoadFile(slot) => self.pick_sample(slot),
-                        PanelAction::Clear(slot) => {
-                            if self.preview.as_ref().is_some_and(|(n, _)| *n == slot) {
-                                self.preview = None;
+                // Scrolls when the panel is taller than the window (e.g. with
+                // transfer messages).
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    ui.add_space(6.0);
+                    if self.state.view == View::Sequences
+                        && sequences::sidebar(ui, &mut self.state, &transport)
+                    {
+                        play_toggled = true;
+                    }
+                    let actions = if self.state.view == View::Samples {
+                        let playing = self
+                            .preview
+                            .as_ref()
+                            .filter(|(n, _)| Some(*n) == self.state.selected)
+                            .map(|(_, p)| {
+                                let (played, total) = p.position();
+                                played as f32 / total.max(1) as f32
+                            });
+                        slot_panel::show(ui, &mut self.state, &mut self.name_edit, playing)
+                    } else {
+                        Vec::new()
+                    };
+                    for action in actions {
+                        match action {
+                            PanelAction::LoadFile(slot) => self.pick_sample(slot),
+                            PanelAction::Clear(slot) => {
+                                if self.preview.as_ref().is_some_and(|(n, _)| *n == slot) {
+                                    self.preview = None;
+                                }
+                                self.state.clear(slot);
                             }
-                            self.state.clear(slot);
-                        }
-                        PanelAction::ApplyTrim => {
-                            if let Err(err) = self.state.apply_trim() {
-                                self.error(err);
+                            PanelAction::ApplyTrim => {
+                                if let Err(err) = self.state.apply_trim() {
+                                    self.error(err);
+                                }
                             }
-                        }
-                        PanelAction::Normalize => match self.state.normalize_selected() {
-                            Ok(gain) => {
-                                self.info(style::caps(&format!("Normalized, gain {gain:.2}")))
-                            }
-                            Err(err) => self.error(err),
-                        },
-                        PanelAction::Pitch => match self.state.pitch_selected() {
-                            Ok(()) => {
-                                let text = format!("Pitch {:+} semitones", self.state.pitch);
-                                self.info(style::caps(&text));
-                            }
-                            Err(err) => self.error(err),
-                        },
-                        PanelAction::Undo(slot) => {
-                            if self.state.undo(slot) {
-                                self.info(style::caps(&format!("Undo in slot {slot}")));
+                            PanelAction::Normalize => match self.state.normalize_selected() {
+                                Ok(gain) => {
+                                    self.info(style::caps(&format!("Normalized, gain {gain:.2}")))
+                                }
+                                Err(err) => self.error(err),
+                            },
+                            PanelAction::Pitch => match self.state.pitch_selected() {
+                                Ok(()) => {
+                                    let text = format!("Pitch {:+} semitones", self.state.pitch);
+                                    self.info(style::caps(&text));
+                                }
+                                Err(err) => self.error(err),
+                            },
+                            PanelAction::Undo(slot) => {
+                                if self.state.undo(slot) {
+                                    self.info(style::caps(&format!("Undo in slot {slot}")));
+                                }
                             }
                         }
                     }
-                }
-                if self.state.view == View::Samples && self.state.selected.is_some() {
+                    if self.state.view == View::Samples && self.state.selected.is_some() {
+                        ui.add_space(12.0);
+                        ui.separator();
+                        ui.add_space(6.0);
+                        let busy = self.transfer.is_some();
+                        match record_panel::show(
+                            ui,
+                            &mut self.state,
+                            &self.inputs,
+                            recording_view.as_ref(),
+                            busy,
+                        ) {
+                            Some(RecordAction::Start(slot)) => self.start_recording(slot),
+                            Some(RecordAction::Stop) => self.stop_recording(),
+                            Some(RecordAction::RefreshInputs) => self.inputs = list_inputs(),
+                            None => {}
+                        }
+                    }
                     ui.add_space(12.0);
                     ui.separator();
                     ui.add_space(6.0);
-                    let busy = self.transfer.is_some();
-                    match record_panel::show(
+                    let actions = transfer_panel::show(
                         ui,
                         &mut self.state,
-                        &self.inputs,
-                        recording_view.as_ref(),
-                        busy,
-                    ) {
-                        Some(RecordAction::Start(slot)) => self.start_recording(slot),
-                        Some(RecordAction::Stop) => self.stop_recording(),
-                        Some(RecordAction::RefreshInputs) => self.inputs = list_inputs(),
-                        None => {}
-                    }
-                }
-                ui.add_space(12.0);
-                ui.separator();
-                ui.add_space(6.0);
-                let actions = transfer_panel::show(
-                    ui,
-                    &mut self.state,
-                    &self.outputs,
-                    progress,
-                    &self.report,
-                );
-                for action in actions {
-                    match action {
-                        TransferAction::Send => self.start_transfer(self.state.transfer_targets()),
-                        TransferAction::SendCurrentPattern => {
-                            self.start_transfer(vec![Target::Pattern(self.state.pattern)])
-                        }
-                        TransferAction::Cancel => {
-                            if let Some(TransferJob::Running { transfer, .. }) = &self.transfer {
-                                transfer.cancel();
+                        &self.outputs,
+                        progress,
+                        &self.report,
+                    );
+                    for action in actions {
+                        match action {
+                            TransferAction::Send => {
+                                self.start_transfer(self.state.transfer_targets())
                             }
+                            TransferAction::SendCurrentPattern => {
+                                self.start_transfer(vec![Target::Pattern(self.state.pattern)])
+                            }
+                            TransferAction::Cancel => {
+                                if let Some(TransferJob::Running { transfer, .. }) = &self.transfer
+                                {
+                                    transfer.cancel();
+                                }
+                            }
+                            TransferAction::RefreshOutputs => self.outputs = list_outputs(),
                         }
-                        TransferAction::RefreshOutputs => self.outputs = list_outputs(),
                     }
-                }
+                });
             });
         egui::CentralPanel::default().show(ui, |ui| {
             if self.state.view == View::Sequences {
@@ -911,6 +1017,7 @@ impl eframe::App for VolcasmApp {
         if play_toggled {
             self.toggle_sequence_preview();
         }
+        self.menu(&ctx);
         self.confirm_discard(&ctx);
         self.screenshot_step(&ctx);
     }

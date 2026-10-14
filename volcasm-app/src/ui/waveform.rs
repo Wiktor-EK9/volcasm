@@ -8,6 +8,11 @@ use super::style;
 
 /// Width of the grab area around a handle, in points.
 const HANDLE_GRAB: f32 = 10.0;
+/// Low-resolution, "retro" look: one bar per `BAR_PITCH` points, bar
+/// heights in steps of `LEVEL_STEP` points.
+const BAR_WIDTH: f32 = 3.0;
+const BAR_PITCH: f32 = 4.0;
+const LEVEL_STEP: f32 = 3.0;
 
 /// Peak (min, max) of each of `columns` equal parts of `pcm`, in -1..=1.
 pub fn peaks(pcm: &[i16], columns: usize) -> Vec<(f32, f32)> {
@@ -28,13 +33,20 @@ pub fn peaks(pcm: &[i16], columns: usize) -> Vec<(f32, f32)> {
         .collect()
 }
 
-/// Shows the waveform of `pcm` with the trim range `range` (frames). Returns
+/// Shows the waveform of `pcm` with the trim range `range` (frames) and,
+/// while the sample is being previewed, how much has played (0..1). Returns
 /// true when a handle was dragged.
-pub fn show(ui: &mut Ui, pcm: &[i16], range: &mut Range<usize>, height: f32) -> bool {
+pub fn show(
+    ui: &mut Ui,
+    pcm: &[i16],
+    range: &mut Range<usize>,
+    height: f32,
+    progress: Option<f32>,
+) -> bool {
     let width = ui.available_width();
     let (rect, _) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
     let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, 2.0, style::BACKGROUND);
+    painter.rect_filled(rect, 2.0, style::background());
 
     let frames = pcm.len().max(1);
     let x_of = |frame: usize| rect.left() + rect.width() * frame as f32 / frames as f32;
@@ -45,26 +57,35 @@ pub fn show(ui: &mut Ui, pcm: &[i16], range: &mut Range<usize>, height: f32) -> 
     // Dimmed outside the kept range.
     let (start_x, end_x) = (x_of(range.start), x_of(range.end));
     let mid = rect.center().y;
-    for (i, (lo, hi)) in peaks(pcm, rect.width().max(1.0) as usize)
-        .into_iter()
-        .enumerate()
-    {
-        let x = rect.left() + i as f32 + 0.5;
-        let color = if (start_x..=end_x).contains(&x) {
-            style::WAVE
+    let half = rect.height() / 2.0 - 2.0;
+    // Bar heights snap to whole steps, at least one step around the middle.
+    let snap = |v: f32| ((v * half / LEVEL_STEP).ceil().max(1.0) * LEVEL_STEP).min(half);
+    let bars = (rect.width() / BAR_PITCH).max(1.0) as usize;
+    for (i, (lo, hi)) in peaks(pcm, bars).into_iter().enumerate() {
+        let left = rect.left() + i as f32 * BAR_PITCH;
+        let center = left + BAR_WIDTH / 2.0;
+        let color = if (start_x..=end_x).contains(&center) {
+            style::wave()
         } else {
-            style::TEXT_DIM.gamma_multiply(0.5)
+            style::text_dim().gamma_multiply(0.5)
         };
-        let half = rect.height() / 2.0 - 2.0;
-        painter.line_segment(
-            [Pos2::new(x, mid - hi * half), Pos2::new(x, mid - lo * half)],
-            Stroke::new(1.0, color),
+        let bar = Rect::from_min_max(
+            Pos2::new(left, mid - snap(hi.max(0.0))),
+            Pos2::new(left + BAR_WIDTH, mid + snap((-lo).max(0.0))),
         );
+        painter.rect_filled(bar, 0.0, color);
     }
     painter.line_segment(
         [Pos2::new(rect.left(), mid), Pos2::new(rect.right(), mid)],
-        Stroke::new(1.0, style::TEXT_DIM.gamma_multiply(0.4)),
+        Stroke::new(1.0, style::text_dim().gamma_multiply(0.4)),
     );
+
+    // Preview progress, as on the slot tiles.
+    if let Some(fraction) = progress {
+        let mut bar = rect;
+        bar.set_width(rect.width() * fraction.clamp(0.0, 1.0));
+        painter.rect_filled(bar, 2.0, style::ACCENT.gamma_multiply(0.35));
+    }
 
     let mut changed = false;
     for is_start in [true, false] {
@@ -95,7 +116,7 @@ pub fn show(ui: &mut Ui, pcm: &[i16], range: &mut Range<usize>, height: f32) -> 
             changed = true;
         }
         let color = if response.hovered() || response.dragged() {
-            style::TEXT
+            style::text()
         } else {
             style::ACCENT
         };

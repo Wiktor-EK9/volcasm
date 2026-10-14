@@ -14,6 +14,9 @@ use volcasm_core::sample::{Sample, edit};
 /// (`docs/hardware.md`, section 2) and a shorter stream.
 pub const TRANSFER_BITS: u32 = 16;
 
+/// Name of a new project.
+pub const DEFAULT_PROJECT_NAME: &str = "New Project";
+
 /// Undo steps kept per slot (session only, not saved).
 pub const UNDO_DEPTH: usize = 10;
 
@@ -104,7 +107,7 @@ pub struct AppState {
 
 impl Default for AppState {
     fn default() -> Self {
-        Self::with_project(Project::new(&VOLCA_SAMPLE, "untitled"), None)
+        Self::with_project(Project::new(&VOLCA_SAMPLE, DEFAULT_PROJECT_NAME), None)
     }
 }
 

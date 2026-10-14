@@ -2,6 +2,7 @@
 
 mod app;
 mod preview;
+mod settings;
 mod state;
 mod ui;
 
@@ -14,7 +15,8 @@ use state::PartView;
 
 const USAGE: &str = "usage: volcasm [project.volcasm | project.vsj] [--select <slot>] \
                      [--sequences] [--pattern <1-10>] [--params <part>] [--motion <part>] \
-                     [--size <width>x<height>] [--screenshot <out.png>]";
+                     [--theme light|dark] [--menu] [--size <width>x<height>] \
+                     [--screenshot <out.png>]";
 
 fn parse_args() -> Result<(Options, Option<egui::Vec2>), String> {
     let mut options = Options::default();
@@ -31,6 +33,14 @@ fn parse_args() -> Result<(Options, Option<egui::Vec2>), String> {
             }
             "--screenshot" => options.screenshot = Some(PathBuf::from(value()?)),
             "--sequences" => options.sequences = true,
+            "--menu" => options.menu = true,
+            "--theme" => {
+                options.theme = Some(match value()?.as_str() {
+                    "light" => true,
+                    "dark" => false,
+                    _ => return Err("theme is light or dark".into()),
+                })
+            }
             "--pattern" => {
                 let n: usize = value()?
                     .parse()

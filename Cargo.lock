@@ -3583,6 +3583,8 @@ dependencies = [
  "eframe",
  "image",
  "rfd",
+ "serde",
+ "serde_json",
  "volcasm-audio",
  "volcasm-core",
  "volcasm-vosyr-import",

@@ -79,7 +79,7 @@ pub fn show(
         }
     });
     if let Err(err) = inputs {
-        ui.colored_label(style::WARNING, err);
+        ui.colored_label(style::warning(), err);
     }
     ui.checkbox(
         &mut state.record.trim_silence,
@@ -106,13 +106,13 @@ fn level_meter(ui: &mut Ui, level: f32) {
     let (rect, _) =
         ui.allocate_exact_size(egui::vec2(ui.available_width(), 14.0), egui::Sense::hover());
     let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, 2.0, style::BACKGROUND);
+    painter.rect_filled(rect, 2.0, style::background());
     let mut fill = rect;
     fill.set_width(rect.width() * level.clamp(0.0, 1.0));
     let color = if level >= 0.99 {
         style::ACCENT
     } else {
-        style::WAVE
+        style::wave()
     };
     painter.rect_filled(fill, 2.0, color);
 }

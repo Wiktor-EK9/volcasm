@@ -104,7 +104,7 @@ pub fn show(
         }
     });
     if let Err(err) = outputs {
-        ui.colored_label(style::WARNING, err);
+        ui.colored_label(style::warning(), err);
     }
 
     ui.add_space(8.0);
@@ -143,7 +143,7 @@ pub fn show(
             if *is_error {
                 style::ACCENT
             } else {
-                style::WARNING
+                style::warning()
             },
             line,
         );
@@ -158,7 +158,7 @@ fn subsection(ui: &mut Ui, title: &str) {
         ui.label(
             egui::RichText::new(style::caps(title))
                 .size(13.0)
-                .color(style::TEXT_DIM),
+                .color(style::text_dim()),
         );
         ui.add(egui::Separator::default().horizontal());
     });

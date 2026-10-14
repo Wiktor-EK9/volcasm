@@ -19,6 +19,7 @@ use crate::ui::sequences;
 use crate::ui::slot_panel::{self, NameEdit, PanelAction};
 use crate::ui::slots::{self, SlotAction};
 use crate::ui::style;
+use crate::ui::transfer_dialog::{self, DialogAction};
 use crate::ui::transfer_panel::{self, Progress, TransferAction};
 use volcasm_core::project::Target;
 
@@ -66,7 +67,15 @@ struct ImportJob {
 
 enum TransferJob {
     Encoding(Receiver<Result<Vec<[i16; 2]>, String>>),
-    Running { transfer: Transfer, seconds: f64 },
+    /// Encoded, waiting for the TRANSFER button in the dialog.
+    Ready {
+        frames: Vec<[i16; 2]>,
+        seconds: f64,
+    },
+    Running {
+        transfer: Transfer,
+        seconds: f64,
+    },
 }
 
 struct ActiveRecording {
@@ -100,6 +109,8 @@ pub struct VolcasmApp {
     name_edit: NameEdit,
     /// Project name being edited in the top bar.
     name_draft: Option<String>,
+    /// Transfer dialog open, with the summary of what will be sent.
+    transfer_dialog: Option<Vec<String>>,
     /// In the unsaved-changes dialog, DISCARD is selected (else KEEP).
     discard_focused: bool,
     settings: Settings,
@@ -147,6 +158,7 @@ impl VolcasmApp {
             name_edit: NameEdit::default(),
             name_draft: None,
             discard_focused: false,
+            transfer_dialog: None,
             settings,
             menu_open: options.menu,
             screenshot: options.screenshot.map(|path| Screenshot {
@@ -340,13 +352,45 @@ impl VolcasmApp {
         }
     }
 
+    /// What `targets` will send, for the transfer dialog.
+    fn transfer_summary(&self, targets: &[Target]) -> Vec<String> {
+        let mut lines = Vec::new();
+        let mut erased = Vec::new();
+        let mut patterns = Vec::new();
+        for target in targets {
+            match *target {
+                Target::Sample(n) => {
+                    let name = self.state.project.slot(n).map_or("", |s| s.name.as_str());
+                    lines.push(format!("{} {n}: {name}", style::caps("slot")));
+                }
+                Target::Erase(n) => erased.push(n.to_string()),
+                Target::Pattern(n) => patterns.push((n + 1).to_string()),
+            }
+        }
+        if !erased.is_empty() {
+            lines.push(format!(
+                "{} {}",
+                style::caps("erase slots"),
+                erased.join(", ")
+            ));
+        }
+        if !patterns.is_empty() {
+            lines.push(format!(
+                "{} {}",
+                style::caps("sequences"),
+                patterns.join(", ")
+            ));
+        }
+        lines
+    }
+
+    /// Opens the transfer dialog and encodes the stream in the background.
+    /// Nothing plays until TRANSFER is pressed in the dialog.
     fn start_transfer(&mut self, targets: Vec<Target>) {
-        if targets.is_empty() {
+        if targets.is_empty() || self.transfer.is_some() {
             return;
         }
-        // Previews share the output with the transfer and would corrupt it.
-        self.preview = None;
-        self.sequence_preview = None;
+        self.transfer_dialog = Some(self.transfer_summary(&targets));
         self.report.clear();
         let project = self.state.project.clone();
         let bits = Some(crate::state::TRANSFER_BITS);
@@ -367,12 +411,8 @@ impl VolcasmApp {
             TransferJob::Encoding(rx) => match rx.try_recv() {
                 Ok(Ok(frames)) => {
                     let seconds = frames.len() as f64 / f64::from(STREAM_SAMPLE_RATE);
-                    let options = TransferOptions {
-                        device: self.state.transfer.device.clone(),
-                    };
-                    let transfer = volcasm_audio::start(frames, options);
-                    self.transfer = Some(TransferJob::Running { transfer, seconds });
-                    Some(progress("checking audio path", 0.0, seconds))
+                    self.transfer = Some(TransferJob::Ready { frames, seconds });
+                    None
                 }
                 Ok(Err(err)) => {
                     self.report.push((true, err));
@@ -384,6 +424,10 @@ impl VolcasmApp {
                 }
                 Err(mpsc::TryRecvError::Disconnected) => None,
             },
+            ready @ TransferJob::Ready { .. } => {
+                self.transfer = Some(ready);
+                None
+            }
             TransferJob::Running { transfer, seconds } => {
                 if transfer.phase() == Phase::Done {
                     self.finish_transfer(transfer);
@@ -400,6 +444,66 @@ impl VolcasmApp {
                 self.transfer = Some(TransferJob::Running { transfer, seconds });
                 Some(shown)
             }
+        }
+    }
+
+    /// TRANSFER pressed: starts playing the encoded stream.
+    fn begin_transfer(&mut self) {
+        if let Some(TransferJob::Ready { frames, seconds }) = self.transfer.take() {
+            // Previews share the output with the transfer and would corrupt it.
+            self.preview = None;
+            self.sequence_preview = None;
+            let options = TransferOptions {
+                device: self.state.transfer.device.clone(),
+            };
+            let transfer = volcasm_audio::start(frames, options);
+            self.transfer = Some(TransferJob::Running { transfer, seconds });
+        }
+    }
+
+    /// Closes the dialog; an encoded stream that was not sent is dropped. A
+    /// running transfer keeps the dialog open.
+    fn close_transfer_dialog(&mut self) {
+        match self.transfer {
+            Some(TransferJob::Running { .. }) => {}
+            _ => {
+                self.transfer = None;
+                self.transfer_dialog = None;
+            }
+        }
+    }
+
+    fn transfer_dialog(&mut self, ctx: &egui::Context, progress: Option<&Progress>) {
+        let Some(summary) = self.transfer_dialog.clone() else {
+            return;
+        };
+        let stage = match (&self.transfer, progress) {
+            (Some(TransferJob::Encoding(_)), _) => transfer_dialog::Stage::Preparing,
+            (Some(TransferJob::Ready { seconds, .. }), _) => {
+                transfer_dialog::Stage::Ready(*seconds)
+            }
+            (Some(TransferJob::Running { .. }), Some(p)) => transfer_dialog::Stage::Running(p),
+            (Some(TransferJob::Running { .. }), None) => transfer_dialog::Stage::Preparing,
+            (None, _) => transfer_dialog::Stage::Finished,
+        };
+        let action = transfer_dialog::show(
+            ctx,
+            &summary,
+            stage,
+            &self.report,
+            &self.outputs,
+            &mut self.state.transfer.device,
+        );
+        match action {
+            Some(DialogAction::Start) => self.begin_transfer(),
+            Some(DialogAction::Cancel) => {
+                if let Some(TransferJob::Running { transfer, .. }) = &self.transfer {
+                    transfer.cancel();
+                }
+            }
+            Some(DialogAction::Close) => self.close_transfer_dialog(),
+            Some(DialogAction::RefreshOutputs) => self.outputs = list_outputs(),
+            None => {}
         }
     }
 
@@ -785,6 +889,17 @@ impl VolcasmApp {
     /// while the menu or a dialog is open.
     fn handle_shortcuts(&mut self, ctx: &egui::Context) {
         use egui::{Key, Modifiers};
+        if self.transfer_dialog.is_some() {
+            // In the transfer dialog Esc closes it, or cancels a running
+            // transfer.
+            if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape)) {
+                match &self.transfer {
+                    Some(TransferJob::Running { transfer, .. }) => transfer.cancel(),
+                    _ => self.close_transfer_dialog(),
+                }
+            }
+            return;
+        }
         if self.discarding.is_some() || self.menu_open || ctx.text_edit_focused() {
             return;
         }
@@ -947,6 +1062,7 @@ impl eframe::App for VolcasmApp {
             self.preview = None;
         }
         let progress = self.poll_transfer();
+        let progress_for_dialog = progress.clone();
         let recording_view = self.poll_recording();
         if let Some(player) = &mut self.sequence_preview {
             player.sync(&self.state);
@@ -1116,6 +1232,7 @@ impl eframe::App for VolcasmApp {
         if play_toggled {
             self.toggle_sequence_preview();
         }
+        self.transfer_dialog(&ctx, progress_for_dialog.as_ref());
         self.menu(&ctx);
         self.confirm_discard(&ctx);
         self.screenshot_step(&ctx);

@@ -7,6 +7,7 @@ use super::style;
 use crate::state::AppState;
 
 /// Progress of a running transfer, for display.
+#[derive(Clone)]
 pub struct Progress {
     pub phase: &'static str,
     /// 0..=1.

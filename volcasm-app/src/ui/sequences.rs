@@ -1,5 +1,6 @@
 //! Sequence editor: ten parts with sample, functions, steps, knobs and
-//! motion, plus ACTIVE STEP.
+//! motion in the central area; sequence choice, transport and ACTIVE STEP
+//! in the side bar.
 
 use eframe::egui::{self, Align2, Id, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, vec2};
 use volcasm_core::pattern::{Func, PARTS, Param, Pattern, STEPS, Speed};
@@ -9,6 +10,8 @@ use super::{motion, style};
 use crate::state::{AppState, PartView};
 
 const STEP_SIZE: f32 = 28.0;
+/// Fixed width of the sample list, so the buttons after it line up.
+const SAMPLE_COMBO_WIDTH: f32 = 260.0;
 const STEP_GAP: f32 = 3.0;
 
 const FUNCS: [(Func, &str); 4] = [
@@ -41,14 +44,9 @@ pub struct Transport {
     pub can_play: bool,
 }
 
-/// Shows the editor. Returns true when PLAY/STOP was pressed.
-pub fn show(ui: &mut Ui, state: &mut AppState, transport: &Transport) -> bool {
-    let toggled = header(ui, state, transport);
+/// Shows the ten parts of the current sequence (central area).
+pub fn show(ui: &mut Ui, state: &mut AppState, transport: &Transport) {
     let playhead = transport.step.filter(|_| transport.playing);
-    for warning in state.pattern_warnings() {
-        ui.colored_label(style::WARNING, warning);
-    }
-    ui.add_space(4.0);
     egui::ScrollArea::vertical().show(ui, |ui| {
         for part in 0..PARTS {
             // Each part gets its own id space: the parts repeat the same
@@ -56,53 +54,29 @@ pub fn show(ui: &mut Ui, state: &mut AppState, transport: &Transport) -> bool {
             ui.push_id(("part", part), |ui| part_row(ui, state, part, playhead));
             ui.add_space(6.0);
         }
-        ui.separator();
-        active_steps(ui, state, playhead);
     });
+}
+
+/// Side bar of the sequence editor: sequence choice and editing, preview
+/// transport and ACTIVE STEP. Returns true when PLAY/STOP was pressed.
+pub fn sidebar(ui: &mut Ui, state: &mut AppState, transport: &Transport) -> bool {
+    sequence_choice(ui, state);
+    for issue in state.pattern_warnings() {
+        ui.colored_label(style::WARNING, issue);
+    }
+    ui.add_space(10.0);
+    let toggled = play_and_tempo(ui, state, transport);
+    ui.add_space(10.0);
+    active_steps(ui, state, transport.step.filter(|_| transport.playing));
     toggled
 }
 
-fn header(ui: &mut Ui, state: &mut AppState, transport: &Transport) -> bool {
-    let mut toggled = false;
-    ui.horizontal(|ui| {
-        let (text, fill) = if transport.playing {
-            ("stop", style::ACCENT)
-        } else {
-            ("play", style::TILE_FILLED)
-        };
-        let button = egui::Button::new(egui::RichText::new(style::caps(text)).size(18.0))
-            .fill(fill)
-            .min_size(egui::vec2(90.0, 30.0));
-        if ui
-            .add_enabled(transport.can_play || transport.playing, button)
-            .on_disabled_hover_text(style::caps("not during a transfer"))
-            .clicked()
-        {
-            toggled = true;
-        }
-        ui.label(style::label("Tempo"));
-        let mut tempo = state.project.tempo;
-        let range = volcasm_core::project::TEMPO_RANGE;
-        if ui
-            .add(egui::DragValue::new(&mut tempo).range(range).suffix(" BPM"))
-            .changed()
-        {
-            state.project.tempo = tempo;
-            state.dirty = true;
-        }
-        ui.label(
-            egui::RichText::new(style::caps("preview is an approximation of the volca"))
-                .small()
-                .color(style::TEXT_DIM),
-        );
-    });
-    ui.add_space(4.0);
+fn sequence_choice(ui: &mut Ui, state: &mut AppState) {
+    ui.label(style::brand(
+        &format!("sequence {}", state.pattern + 1),
+        22.0,
+    ));
     ui.horizontal_wrapped(|ui| {
-        ui.label(style::brand(
-            &format!("sequence {}", state.pattern + 1),
-            22.0,
-        ));
-        ui.add_space(8.0);
         for n in 0..state.project.patterns().len() {
             let used = state.project.pattern(n) != Some(&Pattern::default());
             let text = if used {
@@ -114,7 +88,8 @@ fn header(ui: &mut Ui, state: &mut AppState, transport: &Transport) -> bool {
                 state.select_pattern(n);
             }
         }
-        ui.add_space(8.0);
+    });
+    ui.horizontal(|ui| {
         if ui.button(style::label("Copy")).clicked() {
             state.copy_pattern();
         }
@@ -140,6 +115,43 @@ fn header(ui: &mut Ui, state: &mut AppState, transport: &Transport) -> bool {
             state.undo_pattern();
         }
     });
+}
+
+fn play_and_tempo(ui: &mut Ui, state: &mut AppState, transport: &Transport) -> bool {
+    let mut toggled = false;
+    ui.horizontal(|ui| {
+        let (text, fill) = if transport.playing {
+            ("stop", style::ACCENT)
+        } else {
+            ("play", style::TILE_FILLED)
+        };
+        let button = egui::Button::new(egui::RichText::new(style::caps(text)).size(18.0))
+            .fill(fill)
+            .min_size(egui::vec2(90.0, 30.0));
+        if ui
+            .add_enabled(transport.can_play || transport.playing, button)
+            .on_hover_text(style::caps(
+                "preview on the computer, an approximation of the volca",
+            ))
+            .on_disabled_hover_text(style::caps("not during a transfer"))
+            .clicked()
+        {
+            toggled = true;
+        }
+        ui.label(style::label("Tempo"));
+        let mut tempo = state.project.tempo;
+        let range = volcasm_core::project::TEMPO_RANGE;
+        let response = ui.add(egui::DragValue::new(&mut tempo).range(range).suffix(" BPM"));
+        // Dragging up or down changes the tempo (as in DAWs); show that
+        // instead of egui's horizontal cursor.
+        if response.hovered() || response.dragged() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
+        }
+        if response.changed() {
+            state.project.tempo = tempo;
+            state.dirty = true;
+        }
+    });
     toggled
 }
 
@@ -151,8 +163,14 @@ fn part_row(ui: &mut Ui, state: &mut AppState, i: usize, playhead: Option<usize>
         .corner_radius(3.0)
         .inner_margin(6.0)
         .show(ui, |ui| {
+            // Every part spans the whole width, whatever its sample name.
+            ui.set_min_width(ui.available_width());
             ui.horizontal_wrapped(|ui| {
-                ui.label(style::brand(&format!("p{}", i + 1), 18.0));
+                // Fixed width, so "p10" does not push the row to the right.
+                ui.add_sized(
+                    [34.0, 24.0],
+                    egui::Label::new(style::brand(&format!("p{}", i + 1), 18.0)),
+                );
                 sample_combo(ui, state, i, part.sample());
                 for (func, name) in FUNCS {
                     if ui
@@ -236,7 +254,8 @@ fn sample_combo(ui: &mut Ui, state: &mut AppState, i: usize, current: u16) {
     let mut chosen = None;
     egui::ComboBox::from_id_salt(("sample", i))
         .selected_text(name(state, usize::from(current)))
-        .width(200.0)
+        .width(SAMPLE_COMBO_WIDTH)
+        .truncate()
         .height(400.0)
         .show_ui(ui, |ui| {
             for n in 0..state.slot_count() {
@@ -344,14 +363,8 @@ fn speed_knob(ui: &mut Ui, state: &mut AppState, i: usize, speed: Speed) {
 }
 
 fn active_steps(ui: &mut Ui, state: &mut AppState, playhead: Option<usize>) {
-    ui.horizontal(|ui| {
-        ui.label(style::label("Active step"));
-        ui.label(
-            egui::RichText::new(style::caps("steps the sequence plays"))
-                .small()
-                .color(style::TEXT_DIM),
-        );
-    });
+    ui.label(style::label("Active step"))
+        .on_hover_text(style::caps("steps the sequence plays; others are skipped"));
     let bits = state.current_pattern().active_steps();
     if let Some((bits, new_gesture)) = step_row(ui, Id::new("active-steps"), bits, None, playhead) {
         if new_gesture {

@@ -92,6 +92,8 @@ pub struct VolcasmApp {
     outputs: Result<Vec<OutputInfo>, String>,
     inputs: Result<Vec<OutputInfo>, String>,
     name_edit: NameEdit,
+    /// Project name being edited in the top bar.
+    name_draft: Option<String>,
     screenshot: Option<Screenshot>,
     allow_close: bool,
     /// Window title last sent.
@@ -114,6 +116,7 @@ impl VolcasmApp {
             outputs: list_outputs(),
             inputs: list_inputs(),
             name_edit: NameEdit::default(),
+            name_draft: None,
             screenshot: options.screenshot.map(|path| Screenshot {
                 path,
                 frame: 0,
@@ -314,7 +317,7 @@ impl VolcasmApp {
         self.sequence_preview = None;
         self.report.clear();
         let project = self.state.project.clone();
-        let bits = self.state.transfer.bits;
+        let bits = Some(crate::state::TRANSFER_BITS);
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || {
             let result = project
@@ -371,8 +374,12 @@ impl VolcasmApp {
     fn finish_transfer(&mut self, transfer: Transfer) {
         match transfer.wait() {
             Ok(report) => {
+                // Resampling on a 48 kHz-only device is expected and works
+                // (D18), so it is not shown.
                 for warning in &report.warnings {
-                    self.report.push((false, warning.to_string()));
+                    if !matches!(warning, volcasm_audio::check::Warning::Resampled { .. }) {
+                        self.report.push((false, warning.to_string()));
+                    }
                 }
                 if report.xruns > 0 {
                     self.report.push((
@@ -524,6 +531,8 @@ impl VolcasmApp {
     fn top_bar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label(style::brand("volcasm", 30.0).color(style::ACCENT));
+            ui.add_space(8.0);
+            self.project_name(ui);
             ui.add_space(12.0);
             for (view, name) in [(View::Samples, "samples"), (View::Sequences, "sequences")] {
                 let text = egui::RichText::new(style::caps(name)).size(18.0);
@@ -537,10 +546,19 @@ impl VolcasmApp {
             }
             if ui.button(style::label("Open…")).clicked()
                 && let Some(path) = rfd::FileDialog::new()
+                    .add_filter("Volcasm or Vosyr project", &["volcasm", "vsj"])
                     .add_filter("Volcasm project", &["volcasm"])
+                    .add_filter("Vosyr project", &["vsj"])
                     .pick_file()
             {
-                self.discard_then(Discarding::Open(path));
+                let is_vsj = path
+                    .extension()
+                    .is_some_and(|e| e.eq_ignore_ascii_case("vsj"));
+                self.discard_then(if is_vsj {
+                    Discarding::Import(path)
+                } else {
+                    Discarding::Open(path)
+                });
             }
             if ui.button(style::label("Save")).clicked() {
                 self.save(false);
@@ -548,24 +566,51 @@ impl VolcasmApp {
             if ui.button(style::label("Save as…")).clicked() {
                 self.save(true);
             }
-            if ui.button(style::label("Import Vosyr…")).clicked()
-                && let Some(path) = rfd::FileDialog::new()
-                    .add_filter("Vosyr project", &["vsj"])
-                    .pick_file()
-            {
-                self.discard_then(Discarding::Import(path));
-            }
-            ui.add_space(16.0);
-            let name = format!(
-                "{}{}",
-                self.state.project.name,
-                if self.state.dirty { " *" } else { "" }
-            );
-            ui.label(style::brand(&name, 20.0));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 memory_bar(ui, &self.state);
             });
         });
+    }
+
+    /// Project name: click to edit, Enter or clicking away to keep, Esc to
+    /// cancel. Shown in the brand style; edited as typed.
+    fn project_name(&mut self, ui: &mut egui::Ui) {
+        if let Some(text) = &mut self.name_draft {
+            let response = ui.add(
+                egui::TextEdit::singleline(text)
+                    .font(style::brand_font(20.0))
+                    .desired_width(240.0),
+            );
+            if !response.has_focus() && !response.lost_focus() {
+                response.request_focus();
+            }
+            let cancel = ui.input(|i| i.key_pressed(egui::Key::Escape));
+            if cancel {
+                self.name_draft = None;
+            } else if response.lost_focus() {
+                let name = text.trim().to_owned();
+                self.name_draft = None;
+                if !name.is_empty() && name != self.state.project.name {
+                    self.state.project.name = name;
+                    self.state.dirty = true;
+                }
+            }
+            return;
+        }
+        let name = format!(
+            "{}{}",
+            self.state.project.name,
+            if self.state.dirty { " *" } else { "" }
+        );
+        let response = ui
+            .add(egui::Label::new(style::brand(&name, 20.0)).sense(egui::Sense::click()))
+            .on_hover_text(style::caps("click to rename the project"));
+        if response.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Text);
+        }
+        if response.clicked() {
+            self.name_draft = Some(self.state.project.name.clone());
+        }
     }
 
     fn status_bar(&self, ui: &mut egui::Ui) {
@@ -680,7 +725,9 @@ fn memory_bar(ui: &mut egui::Ui, state: &AppState) {
         memory.total_blocks,
         memory.used_blocks as f64 * f64::from(state.project.device().memory.block_size) / 1e6
     );
-    let (rect, _) = ui.allocate_exact_size(egui::vec2(280.0, 22.0), egui::Sense::hover());
+    // Narrower in small windows instead of covering the buttons.
+    let width = ui.available_width().clamp(120.0, 280.0);
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(width, 22.0), egui::Sense::hover());
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, 3.0, style::BACKGROUND);
     let mut fill = rect;
@@ -740,11 +787,25 @@ impl eframe::App for VolcasmApp {
             ui.add_space(4.0);
         });
         egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
+        let transport = sequences::Transport {
+            playing: self.sequence_preview.is_some(),
+            step: self
+                .sequence_preview
+                .as_ref()
+                .and_then(SequencePreview::step),
+            can_play: self.transfer.is_none(),
+        };
+        let mut play_toggled = false;
         egui::Panel::right("side")
             .resizable(true)
             .default_size(380.0)
             .show(ui, |ui| {
                 ui.add_space(6.0);
+                if self.state.view == View::Sequences
+                    && sequences::sidebar(ui, &mut self.state, &transport)
+                {
+                    play_toggled = true;
+                }
                 let actions = if self.state.view == View::Samples {
                     slot_panel::show(ui, &mut self.state, &mut self.name_edit)
                 } else {
@@ -829,21 +890,14 @@ impl eframe::App for VolcasmApp {
             });
         egui::CentralPanel::default().show(ui, |ui| {
             if self.state.view == View::Sequences {
-                let transport = sequences::Transport {
-                    playing: self.sequence_preview.is_some(),
-                    step: self
-                        .sequence_preview
-                        .as_ref()
-                        .and_then(SequencePreview::step),
-                    can_play: self.transfer.is_none(),
-                };
-                if sequences::show(ui, &mut self.state, &transport) {
-                    self.toggle_sequence_preview();
-                }
+                sequences::show(ui, &mut self.state, &transport);
                 return;
             }
             egui::ScrollArea::vertical().show(ui, |ui| {
-                let playing = self.preview.as_ref().map(|(n, _)| *n);
+                let playing = self.preview.as_ref().map(|(n, p)| {
+                    let (played, total) = p.position();
+                    (*n, played as f32 / total.max(1) as f32)
+                });
                 for action in slots::show(ui, &self.state, playing) {
                     match action {
                         SlotAction::Select(n) => self.state.select(n),
@@ -854,6 +908,9 @@ impl eframe::App for VolcasmApp {
             });
         });
 
+        if play_toggled {
+            self.toggle_sequence_preview();
+        }
         self.confirm_discard(&ctx);
         self.screenshot_step(&ctx);
     }

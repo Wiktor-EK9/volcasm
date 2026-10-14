@@ -9,7 +9,8 @@ use crate::state::AppState;
 const COLUMNS: usize = 10;
 const GAP: f32 = 4.0;
 const TILE_HEIGHT: f32 = 80.0;
-const BOX: f32 = 14.0;
+/// Size of the check box and play button: large enough to hit easily.
+const BOX: f32 = 20.0;
 
 /// What the user did in the grid.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,8 +20,9 @@ pub enum SlotAction {
     Play(usize),
 }
 
-/// Draws all slots. `playing` is the slot being previewed, if any.
-pub fn show(ui: &mut Ui, state: &AppState, playing: Option<usize>) -> Vec<SlotAction> {
+/// Draws all slots. `playing` is the slot being previewed and how much of
+/// it has played (0..1), if any.
+pub fn show(ui: &mut Ui, state: &AppState, playing: Option<(usize, f32)>) -> Vec<SlotAction> {
     let mut actions = Vec::new();
     let width = ui.available_width();
     let tile_width = ((width - GAP * (COLUMNS - 1) as f32) / COLUMNS as f32).floor();
@@ -37,7 +39,8 @@ pub fn show(ui: &mut Ui, state: &AppState, playing: Option<usize>) -> Vec<SlotAc
                 row as f32 * (TILE_HEIGHT + GAP),
             );
         let rect = Rect::from_min_size(min, vec2(tile_width, TILE_HEIGHT));
-        tile(ui, state, n, rect, playing == Some(n), &mut actions);
+        let progress = playing.filter(|(slot, _)| *slot == n).map(|(_, f)| f);
+        tile(ui, state, n, rect, progress, &mut actions);
     }
     actions
 }
@@ -47,7 +50,7 @@ fn tile(
     state: &AppState,
     n: usize,
     rect: Rect,
-    playing: bool,
+    progress: Option<f32>,
     actions: &mut Vec<SlotAction>,
 ) {
     let slot = state.project.slot(n);
@@ -79,6 +82,12 @@ fn tile(
         fill
     };
     painter.rect_filled(rect, 3.0, fill);
+    // Preview progress: a translucent bar filling the tile from the left.
+    if let Some(fraction) = progress {
+        let mut bar = rect;
+        bar.set_width(rect.width() * fraction.clamp(0.0, 1.0));
+        painter.rect_filled(bar, 3.0, style::ACCENT.gamma_multiply(0.35));
+    }
     if state.selected == Some(n) {
         painter.rect_stroke(
             rect,
@@ -118,11 +127,13 @@ fn tile(
             galley,
             style::TEXT,
         );
+        // Top line, right of the slot number: the bottom row holds the
+        // check box and play button.
         text_painter.text(
-            Pos2::new(inner.left(), inner.top() + 43.0),
-            Align2::LEFT_TOP,
+            inner.right_top(),
+            Align2::RIGHT_TOP,
             format!("{:.2}S", slot.sample.duration()),
-            style::body_font(11.0),
+            style::body_font(10.0),
             dim,
         );
     }
@@ -144,7 +155,7 @@ fn tile(
         StrokeKind::Inside,
     );
     if checked {
-        painter.rect_filled(check.shrink(3.0), 1.0, style::ACCENT);
+        painter.rect_filled(check.shrink(4.0), 2.0, style::ACCENT);
     }
 
     // Preview button, bottom right.
@@ -157,20 +168,21 @@ fn tile(
         if play_response.clicked() {
             actions.push(SlotAction::Play(n));
         }
+        let playing = progress.is_some();
         let color = if playing || play_response.hovered() {
             style::ACCENT
         } else {
             style::TEXT
         };
         if playing {
-            painter.rect_filled(play.shrink(2.0), 1.0, color);
+            painter.rect_filled(play.shrink(4.0), 1.0, color);
         } else {
             let c = play.center();
             painter.add(egui::Shape::convex_polygon(
                 vec![
-                    Pos2::new(c.x - 4.0, c.y - 5.0),
-                    Pos2::new(c.x + 5.0, c.y),
-                    Pos2::new(c.x - 4.0, c.y + 5.0),
+                    Pos2::new(c.x - 5.0, c.y - 7.0),
+                    Pos2::new(c.x + 7.0, c.y),
+                    Pos2::new(c.x - 5.0, c.y + 7.0),
                 ],
                 color,
                 Stroke::NONE,

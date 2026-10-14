@@ -10,32 +10,20 @@ use volcasm_core::pattern::{MotionRow, PARTS, Pattern};
 use volcasm_core::project::{Project, Slot, Target, file};
 use volcasm_core::sample::{Sample, edit};
 
-/// Compression choices offered for a transfer (bits per sample). 16 bits is
-/// lossless (`docs/hardware.md`, section 2) and shortens the stream.
-pub const BIT_CHOICES: [u32; 9] = [16, 15, 14, 13, 12, 11, 10, 9, 8];
+/// Samples are always sent compressed to 16 bits: lossless
+/// (`docs/hardware.md`, section 2) and a shorter stream.
+pub const TRANSFER_BITS: u32 = 16;
 
 /// Undo steps kept per slot (session only, not saved).
 pub const UNDO_DEPTH: usize = 10;
 
 /// Transfer settings.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TransferSettings {
-    /// Compression bits; `None` sends uncompressed.
-    pub bits: Option<u32>,
     /// Also erase checked slots that are empty in the project.
     pub erase_empty: bool,
     /// Output id from `volcasm_audio::list_outputs`; `None` = default.
     pub device: Option<String>,
-}
-
-impl Default for TransferSettings {
-    fn default() -> Self {
-        Self {
-            bits: Some(16),
-            erase_empty: false,
-            device: None,
-        }
-    }
 }
 
 /// Main view.
@@ -431,25 +419,14 @@ impl AppState {
         }
     }
 
-    /// Problems of the current sequence for display: device issues plus
-    /// parts with steps that play an empty slot.
+    /// Problems of the current sequence that the device would not accept
+    /// (sample out of range, no active step, level or accent changed).
     pub fn pattern_warnings(&self) -> Vec<String> {
-        let pattern = self.current_pattern();
-        let mut out: Vec<String> = pattern
+        self.current_pattern()
             .issues(self.project.device().sample_slots)
             .iter()
             .map(ToString::to_string)
-            .collect();
-        for (i, part) in pattern.parts().enumerate() {
-            let slot = usize::from(part.sample());
-            if part.steps() != 0 && slot < self.slot_count() && self.project.slot(slot).is_none() {
-                out.push(format!(
-                    "part {}: slot {slot} is empty in this project",
-                    i + 1
-                ));
-            }
-        }
-        out
+            .collect()
     }
 
     /// What a transfer sends: checked slots (filled ones as samples, empty
@@ -649,16 +626,16 @@ mod tests {
     }
 
     #[test]
-    fn warnings_mention_empty_slots() {
+    fn warnings_only_for_device_issues() {
         let mut s = AppState::default();
         s.edit_pattern(("x", 0, 0), |p| {
+            // Steps on an empty slot: fine, no warning.
             p.part_mut(1).set_sample(7);
             p.part_mut(1).set_steps(1);
         });
-        assert_eq!(
-            s.pattern_warnings(),
-            ["part 2: slot 7 is empty in this project"]
-        );
+        assert!(s.pattern_warnings().is_empty());
+        s.edit_pattern(("y", 0, 0), |p| p.set_active_steps(0));
+        assert_eq!(s.pattern_warnings(), ["no active step"]);
     }
 
     #[test]

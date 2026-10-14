@@ -41,9 +41,11 @@ pub fn show(
     ui.add_space(4.0);
 
     let Some(slot) = state.project.slot(n) else {
-        ui.label(style::label("Empty slot").color(style::text_dim()));
-        ui.add_space(6.0);
-        if ui.button(style::label("Load file…")).clicked() {
+        style::subsection(ui, "empty slot");
+        if ui
+            .button(style::icon_label(style::icon::FILE_AUDIO, "Load file…"))
+            .clicked()
+        {
             actions.push(PanelAction::LoadFile(n));
         }
         ui.label(
@@ -61,15 +63,12 @@ pub fn show(
         edit.slot = Some(n);
         edit.text = slot.name.clone();
     }
-    ui.horizontal(|ui| {
-        ui.label(style::label("Name"));
-        let response =
-            ui.add(egui::TextEdit::singleline(&mut edit.text).desired_width(f32::INFINITY));
-        if response.lost_focus() || response.changed() {
-            let name = edit.text.clone();
-            state.rename(n, name);
-        }
-    });
+    style::subsection(ui, "name");
+    let response = ui.add(egui::TextEdit::singleline(&mut edit.text).desired_width(f32::INFINITY));
+    if response.lost_focus() || response.changed() {
+        let name = edit.text.clone();
+        state.rename(n, name);
+    }
 
     let slot = state.project.slot(n).expect("slot checked above");
     let frames = slot.sample.frames();
@@ -81,7 +80,7 @@ pub fn show(
         range = 0..frames;
     }
 
-    ui.add_space(6.0);
+    style::subsection(ui, &style::with_icon(style::icon::WAVEFORM, "waveform"));
     if waveform::show(ui, &pcm, &mut range, 140.0, playing) {
         state.trim = Some(range.clone());
     }
@@ -107,14 +106,13 @@ pub fn show(
         ui.end_row();
     });
 
-    ui.add_space(6.0);
+    style::subsection(ui, "pitch");
     let button_height = ui.spacing().interact_size.y + 2.0 * ui.spacing().button_padding.y;
     // A row as tall as the display, with everything centered in it.
     ui.allocate_ui_with_layout(
         egui::vec2(ui.available_width(), button_height),
         egui::Layout::left_to_right(egui::Align::Center),
         |ui| {
-            ui.label(style::label("Pitch"));
             let spec = segment::SegmentSpec {
                 min: *PITCH_RANGE.start(),
                 max: *PITCH_RANGE.end(),
@@ -153,7 +151,7 @@ pub fn show(
         },
     );
 
-    ui.add_space(6.0);
+    style::subsection(ui, "edit");
     let trimmed = range != (0..frames);
     ui.horizontal_wrapped(|ui| {
         if ui

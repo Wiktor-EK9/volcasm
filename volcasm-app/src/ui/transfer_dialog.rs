@@ -183,7 +183,7 @@ fn details(
 
     let idle = !matches!(stage, Stage::Running(_));
     ui.horizontal(|ui| {
-        ui.label(style::label("Output"));
+        ui.label(style::icon_label(style::icon::SPEAKER_HIGH, "Output"));
         let selected = match (&*device, outputs) {
             (None, _) => style::caps("default"),
             (Some(id), Ok(list)) => list

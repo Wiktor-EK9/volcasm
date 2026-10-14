@@ -38,7 +38,7 @@ pub fn show(
     let targets = state.transfer_targets();
     let patterns = state.project.patterns().len();
 
-    subsection(ui, "samples");
+    style::subsection(ui, &style::with_icon(style::icon::WAVEFORM, "samples"));
     ui.label(style::label(&format!("{} checked", state.checked.len())));
     ui.horizontal_wrapped(|ui| {
         if ui.small_button(style::label("Check all")).clicked() {
@@ -56,7 +56,7 @@ pub fn show(
         style::label("Erase checked empty slots"),
     );
 
-    subsection(ui, "sequences");
+    style::subsection(ui, &style::with_icon(style::icon::STEPS, "sequences"));
     ui.horizontal_wrapped(|ui| {
         for n in 0..patterns {
             let checked = state.checked_patterns.contains(&n);
@@ -78,7 +78,7 @@ pub fn show(
         }
     });
 
-    subsection(ui, "output");
+    style::subsection(ui, &style::with_icon(style::icon::SPEAKER_HIGH, "output"));
     ui.horizontal(|ui| {
         let selected = match (&state.transfer.device, outputs) {
             (None, _) => style::caps("default"),
@@ -115,9 +115,12 @@ pub fn show(
     match progress {
         None => {
             let label = if targets.is_empty() {
-                style::caps("send")
+                style::with_icon(style::icon::PAPER_PLANE_TILT, "send")
             } else {
-                style::caps(&format!("send {} items", targets.len()))
+                style::with_icon(
+                    style::icon::PAPER_PLANE_TILT,
+                    &format!("send {} items", targets.len()),
+                )
             };
             let button = egui::Button::new(egui::RichText::new(label).size(18.0))
                 .fill(style::ACCENT)
@@ -153,17 +156,4 @@ pub fn show(
         );
     }
     actions
-}
-
-/// A small titled divider inside the transfer panel.
-fn subsection(ui: &mut Ui, title: &str) {
-    ui.add_space(6.0);
-    ui.horizontal(|ui| {
-        ui.label(
-            egui::RichText::new(style::caps(title))
-                .size(13.0)
-                .color(style::text_dim()),
-        );
-        ui.add(egui::Separator::default().horizontal());
-    });
 }

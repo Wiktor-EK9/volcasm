@@ -63,20 +63,24 @@ pub fn show(ctx: &egui::Context, open: &mut bool, memory_in_mb: bool) -> Option<
                 ui.set_width(WIDTH - 32.0);
                 ui.label(style::brand("volcasm", 30.0).color(style::ACCENT));
                 ui.add_space(16.0);
-                let item = |ui: &mut egui::Ui, text: &str| {
+                let item = |ui: &mut egui::Ui, icon: &str, text: &str| {
                     ui.add(
-                        egui::Button::new(egui::RichText::new(style::caps(text)).size(18.0))
+                        egui::Button::new(style::icon_label(icon, text).size(18.0))
                             .min_size(vec2(ui.available_width(), 36.0)),
                     )
                     .clicked()
                 };
-                for (text, chosen) in [
-                    ("new file", MenuAction::New),
-                    ("open…", MenuAction::Open),
-                    ("save", MenuAction::Save),
-                    ("save as…", MenuAction::SaveAs),
+                for (icon, text, chosen) in [
+                    (style::icon::FILE_PLUS, "new file", MenuAction::New),
+                    (style::icon::FOLDER_OPEN, "open…", MenuAction::Open),
+                    (style::icon::FLOPPY_DISK, "save", MenuAction::Save),
+                    (
+                        style::icon::FLOPPY_DISK_BACK,
+                        "save as…",
+                        MenuAction::SaveAs,
+                    ),
                 ] {
-                    if item(ui, text) {
+                    if item(ui, icon, text) {
                         action = Some(chosen);
                     }
                     ui.add_space(4.0);
@@ -87,8 +91,11 @@ pub fn show(ctx: &egui::Context, open: &mut bool, memory_in_mb: bool) -> Option<
                 ui.label(style::label("Theme"));
                 ui.horizontal(|ui| {
                     let light = style::is_light();
-                    for (name, value) in [("dark", false), ("light", true)] {
-                        let text = egui::RichText::new(style::caps(name)).size(16.0);
+                    for (icon, name, value) in [
+                        (style::icon::MOON, "dark", false),
+                        (style::icon::SUN, "light", true),
+                    ] {
+                        let text = style::icon_label(icon, name).size(16.0);
                         if ui.selectable_label(light == value, text).clicked() && light != value {
                             action = Some(MenuAction::Theme(value));
                         }

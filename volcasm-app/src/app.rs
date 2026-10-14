@@ -733,14 +733,19 @@ impl VolcasmApp {
             }
             return;
         }
-        let name = format!(
-            "{}{}",
-            self.state.project.name,
-            if self.state.dirty { " *" } else { "" }
-        );
         let response = ui
-            .add(egui::Label::new(style::brand(&name, 20.0)).sense(egui::Sense::click()))
+            .add(
+                egui::Label::new(style::brand(&self.state.project.name, 20.0))
+                    .sense(egui::Sense::click()),
+            )
             .on_hover_text(style::caps("click to rename the project"));
+        if self.state.dirty {
+            // A red dot, as the unsaved marker of many editors.
+            let (rect, dot) = ui.allocate_exact_size(egui::vec2(10.0, 20.0), egui::Sense::hover());
+            ui.painter()
+                .circle_filled(rect.center(), 4.5, style::ACCENT);
+            dot.on_hover_text(style::caps("unsaved changes"));
+        }
         if response.hovered() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Text);
         }
@@ -1001,13 +1006,15 @@ fn meters(ui: &mut egui::Ui, state: &AppState, in_mb: bool) {
         // Whole blocks, as the device fills its memory.
         let mb = |blocks: u64| blocks as f64 * f64::from(device.memory.block_size) / 1e6;
         format!(
-            "MEMORY {:.2} / {:.2} MB",
+            "{} MEMORY {:.2} / {:.2} MB",
+            style::icon::MEMORY,
             mb(memory.used_blocks),
             mb(memory.total_blocks)
         )
     } else {
         format!(
-            "MEMORY {} / {} BLK · {:.2} MB",
+            "{} MEMORY {} / {} BLK · {:.2} MB",
+            style::icon::MEMORY,
             memory.used_blocks,
             memory.total_blocks,
             memory.used_blocks as f64 * f64::from(device.memory.block_size) / 1e6
@@ -1020,7 +1027,7 @@ fn meters(ui: &mut egui::Ui, state: &AppState, in_mb: bool) {
     // meter only turns red with it.
     let seconds = state.project.total_duration();
     let max = device.max_sample_seconds();
-    let text = format!("DURATION {seconds:.2} / {max:.1} S");
+    let text = format!("{} DURATION {seconds:.2} / {max:.1} S", style::icon::TIMER);
     meter(ui, width, (seconds / max) as f32, &text, memory.fits());
 }
 

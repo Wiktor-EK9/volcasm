@@ -40,7 +40,7 @@ pub fn show(
             rec.slot, rec.seconds, rec.max_seconds
         )));
         level_meter(ui, rec.level);
-        let stop = egui::Button::new(egui::RichText::new(style::caps("stop")).size(18.0))
+        let stop = egui::Button::new(style::icon_label(style::icon::STOP, "stop").size(18.0))
             .fill(style::ACCENT)
             .min_size(egui::vec2(ui.available_width(), 30.0));
         if ui.add(stop).clicked() {
@@ -49,8 +49,8 @@ pub fn show(
         return action;
     }
 
+    style::subsection(ui, &style::with_icon(style::icon::MICROPHONE, "input"));
     ui.horizontal(|ui| {
-        ui.label(style::label("Input"));
         let selected = match (&state.record.input, inputs) {
             (None, _) => style::caps("default"),
             (Some(id), Ok(list)) => list

@@ -10,6 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 eframe = { version = "0.36.2", default-features = false, features = ["glow", "wayland", "x11", "accesskit"] }
+egui-phosphor = { version = "0.14.0", default-features = false, features = ["regular"] }
 image = { version = "0.25.10", default-features = false, features = ["png"] }
 rfd = { version = "0.17.2", default-features = false, features = ["xdg-portal"] }
 serde = { version = "1", features = ["derive"] }

@@ -5,7 +5,8 @@
 //! Barlow Semi Condensed Medium, always upper case, for everything else
 //! (like the panel labels). DSEG7 Classic Mini for the seven-segment
 //! displays (like the volca's LED display). All fonts: SIL OFL 1.1,
-//! `assets/fonts/`.
+//! `assets/fonts/`. Icons: Phosphor Regular (MIT), from `egui-phosphor`,
+//! as the last fallback of the text fonts.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -17,10 +18,14 @@ use eframe::egui::{
 const BARLOW: &str = "barlow-semi-condensed-medium";
 const OVERPASS: &str = "overpass-bold";
 const DSEG: &str = "dseg7-classic-mini";
+const PHOSPHOR: &str = "phosphor";
 /// Font family for [`segment_font`].
 const SEGMENT_FAMILY: &str = "segment";
 /// Font family for [`brand`] text.
 const BRAND_FAMILY: &str = "brand";
+
+/// Icon code points, used as characters in text.
+pub use egui_phosphor::regular as icon;
 
 /// Accent: the red of the volca sample LED display. The same in both
 /// themes.
@@ -149,10 +154,17 @@ pub fn install(ctx: &egui::Context, light: bool) {
             "../../assets/fonts/Overpass-Bold.ttf"
         ))),
     );
-    // Overpass as fallback for symbols Barlow lacks (e.g. arrows).
+    fonts.font_data.insert(
+        PHOSPHOR.into(),
+        Arc::new(FontData::from_static(
+            egui_phosphor::Variant::Regular.font_bytes(),
+        )),
+    );
+    // Overpass as fallback for symbols Barlow lacks (e.g. arrows); the
+    // icons last, so they never replace a letter.
     fonts.families.insert(
         FontFamily::Proportional,
-        vec![BARLOW.into(), OVERPASS.into()],
+        vec![BARLOW.into(), OVERPASS.into(), PHOSPHOR.into()],
     );
     fonts
         .families
@@ -168,7 +180,7 @@ pub fn install(ctx: &egui::Context, light: bool) {
         .insert(FontFamily::Name(SEGMENT_FAMILY.into()), vec![DSEG.into()]);
     fonts.families.insert(
         FontFamily::Name(BRAND_FAMILY.into()),
-        vec![OVERPASS.into(), BARLOW.into()],
+        vec![OVERPASS.into(), BARLOW.into(), PHOSPHOR.into()],
     );
     ctx.set_fonts(fonts);
 
@@ -205,6 +217,29 @@ pub fn lower(text: &str) -> String {
 /// Interface text: Barlow, always upper case.
 pub fn label(text: &str) -> RichText {
     RichText::new(caps(text))
+}
+
+/// Interface text after an icon: `icon` is one of [`icon`].
+pub fn icon_label(icon: &str, text: &str) -> RichText {
+    RichText::new(with_icon(icon, text))
+}
+
+/// `text` in upper case after `icon`, for painted text and buttons with
+/// their own size.
+pub fn with_icon(icon: &str, text: &str) -> String {
+    format!("{icon} {}", caps(text))
+}
+
+/// Section header of the side bar: dim title, then a line to the right
+/// edge. The controls go on the lines below.
+pub fn subsection(ui: &mut egui::Ui, title: &str) -> egui::Response {
+    ui.add_space(6.0);
+    ui.horizontal(|ui| {
+        let response = ui.label(RichText::new(caps(title)).size(13.0).color(text_dim()));
+        ui.add(egui::Separator::default().horizontal());
+        response
+    })
+    .inner
 }
 
 /// Brand text (logo, project name, section titles): Overpass Bold, always

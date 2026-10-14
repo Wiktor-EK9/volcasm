@@ -66,9 +66,8 @@ pub fn sidebar(ui: &mut Ui, state: &mut AppState, transport: &Transport) -> bool
     for issue in state.pattern_warnings() {
         ui.colored_label(style::warning(), issue);
     }
-    ui.add_space(10.0);
+    style::subsection(ui, &style::with_icon(style::icon::PLAY, "preview"));
     let toggled = play_and_tempo(ui, state, transport);
-    ui.add_space(10.0);
     active_steps(ui, state, transport.step.filter(|_| transport.playing));
     toggled
 }
@@ -126,12 +125,12 @@ fn play_and_tempo(ui: &mut Ui, state: &mut AppState, transport: &Transport) -> b
         egui::vec2(ui.available_width(), PLAY_HEIGHT),
         egui::Layout::left_to_right(egui::Align::Center),
         |ui| {
-            let (text, fill) = if transport.playing {
-                ("stop", style::ACCENT)
+            let (icon, text, fill) = if transport.playing {
+                (style::icon::STOP, "stop", style::ACCENT)
             } else {
-                ("play", style::tile_filled())
+                (style::icon::PLAY, "play", style::tile_filled())
             };
-            let button = egui::Button::new(egui::RichText::new(style::caps(text)).size(18.0))
+            let button = egui::Button::new(style::icon_label(icon, text).size(18.0))
                 .fill(fill)
                 .min_size(egui::vec2(90.0, PLAY_HEIGHT));
             if ui
@@ -144,7 +143,6 @@ fn play_and_tempo(ui: &mut Ui, state: &mut AppState, transport: &Transport) -> b
             {
                 toggled = true;
             }
-            ui.label(style::label("Tempo"));
             let range = volcasm_core::project::TEMPO_RANGE;
             let spec = segment::SegmentSpec {
                 min: (*range.start()).into(),
@@ -159,6 +157,7 @@ fn play_and_tempo(ui: &mut Ui, state: &mut AppState, transport: &Transport) -> b
                 state.project.tempo = t as u16;
                 state.dirty = true;
             }
+            ui.label(style::label("bpm").color(style::text_dim()));
         },
     );
     toggled
@@ -372,7 +371,7 @@ fn speed_knob(ui: &mut Ui, state: &mut AppState, i: usize, speed: Speed) {
 }
 
 fn active_steps(ui: &mut Ui, state: &mut AppState, playhead: Option<usize>) {
-    ui.label(style::label("Active step"))
+    style::subsection(ui, &style::with_icon(style::icon::STEPS, "active step"))
         .on_hover_text(style::caps("steps the sequence plays; others are skipped"));
     let bits = state.current_pattern().active_steps();
     if let Some((bits, new_gesture)) = step_row(ui, Id::new("active-steps"), bits, None, playhead) {

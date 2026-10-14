@@ -100,6 +100,8 @@ pub struct VolcasmApp {
     name_edit: NameEdit,
     /// Project name being edited in the top bar.
     name_draft: Option<String>,
+    /// In the unsaved-changes dialog, DISCARD is selected (else KEEP).
+    discard_focused: bool,
     settings: Settings,
     menu_open: bool,
     screenshot: Option<Screenshot>,
@@ -144,6 +146,7 @@ impl VolcasmApp {
             inputs: list_inputs(),
             name_edit: NameEdit::default(),
             name_draft: None,
+            discard_focused: false,
             settings,
             menu_open: options.menu,
             screenshot: options.screenshot.map(|path| Screenshot {
@@ -711,20 +714,59 @@ impl VolcasmApp {
         let Some(action) = self.discarding.clone() else {
             return;
         };
-        let mut choice = None;
+        // Keyboard: arrows or Tab move between the buttons, Enter confirms,
+        // Y discards, N or Esc keeps editing.
+        let mut choice = ctx.input_mut(|i| {
+            use egui::{Key, Modifiers};
+            if i.consume_key(Modifiers::NONE, Key::ArrowLeft)
+                || i.consume_key(Modifiers::NONE, Key::ArrowRight)
+                || i.consume_key(Modifiers::NONE, Key::Tab)
+            {
+                self.discard_focused = !self.discard_focused;
+            }
+            if i.consume_key(Modifiers::NONE, Key::Y) {
+                Some(true)
+            } else if i.consume_key(Modifiers::NONE, Key::N)
+                || i.consume_key(Modifiers::NONE, Key::Escape)
+            {
+                Some(false)
+            } else if i.consume_key(Modifiers::NONE, Key::Enter) {
+                Some(self.discard_focused)
+            } else {
+                None
+            }
+        });
+        let focused = self.discard_focused;
         egui::Modal::new(egui::Id::new("discard")).show(ctx, |ui| {
             ui.label(style::brand("unsaved changes", 20.0));
             ui.label(style::label("Discard the changes in this project?"));
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                if ui.button(style::label("Discard")).clicked() {
+                let button = |text: &str, selected: bool| {
+                    let button = egui::Button::new(style::label(text));
+                    if selected {
+                        button.fill(style::ACCENT)
+                    } else {
+                        button
+                    }
+                };
+                if ui.add(button("Discard (Y)", focused)).clicked() {
                     choice = Some(true);
                 }
-                if ui.button(style::label("Keep editing")).clicked() {
+                if ui.add(button("Keep editing (N)", !focused)).clicked() {
                     choice = Some(false);
                 }
             });
+            ui.label(
+                egui::RichText::new(style::caps("← → to choose, enter to confirm"))
+                    .small()
+                    .color(style::text_dim()),
+            );
         });
+        if choice.is_some() {
+            // The safe choice is selected the next time.
+            self.discard_focused = false;
+        }
         match choice {
             Some(true) => {
                 self.discarding = None;
@@ -735,6 +777,39 @@ impl VolcasmApp {
             }
             Some(false) => self.discarding = None,
             None => {}
+        }
+    }
+
+    /// Space plays or stops the selected slot (SAMPLES) or the sequence
+    /// (SEQUENCES); Esc cancels a running transfer. Not while typing or
+    /// while the menu or a dialog is open.
+    fn handle_shortcuts(&mut self, ctx: &egui::Context) {
+        use egui::{Key, Modifiers};
+        if self.discarding.is_some() || self.menu_open || ctx.text_edit_focused() {
+            return;
+        }
+        // Consumed here, so a focused button is not clicked by it as well.
+        if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Space)) {
+            match self.state.view {
+                View::Samples => {
+                    if let Some(slot) = self.state.selected {
+                        self.toggle_preview(slot);
+                    } else {
+                        self.preview = None;
+                    }
+                }
+                View::Sequences => {
+                    if self.transfer.is_none() || self.sequence_preview.is_some() {
+                        self.toggle_sequence_preview();
+                    }
+                }
+            }
+        }
+        if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape))
+            && let Some(TransferJob::Running { transfer, .. }) = &self.transfer
+        {
+            transfer.cancel();
+            self.info(style::caps("Cancelling transfer"));
         }
     }
 
@@ -867,6 +942,7 @@ impl eframe::App for VolcasmApp {
         self.poll_imports();
         self.handle_dropped_files(&ctx);
         self.handle_close(&ctx);
+        self.handle_shortcuts(&ctx);
         if self.preview.as_ref().is_some_and(|(_, p)| p.finished()) {
             self.preview = None;
         }

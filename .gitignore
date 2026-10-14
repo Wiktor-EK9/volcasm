@@ -1,3 +1,6 @@
 /target
 tests/fixtures/vosyr/Test1/samples/sample[0-9]*
 tests/fixtures/**/*.png
+
+# UI sketches and screenshots for redesign work; kept out of the repo.
+docs/ui/

@@ -558,6 +558,7 @@ impl VolcasmApp {
 
     fn top_bar(&mut self, ui: &mut egui::Ui) {
         let mut wrapped = true;
+        let in_mb = self.settings.memory_unit == settings::MemoryUnit::Mb;
         ui.horizontal(|ui| {
             // The logo opens the menu.
             let logo = ui
@@ -585,7 +586,7 @@ impl VolcasmApp {
             // Meters beside the buttons when they fit, else on a second line.
             if ui.available_width() >= METERS_WIDTH {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    meters(ui, &self.state);
+                    meters(ui, &self.state, in_mb);
                 });
                 wrapped = false;
             }
@@ -595,7 +596,7 @@ impl VolcasmApp {
             ui.allocate_ui_with_layout(
                 egui::vec2(ui.available_width(), 24.0),
                 egui::Layout::right_to_left(egui::Align::Center),
-                |ui| meters(ui, &self.state),
+                |ui| meters(ui, &self.state, in_mb),
             );
         }
     }
@@ -661,7 +662,8 @@ impl VolcasmApp {
     }
 
     fn menu(&mut self, ctx: &egui::Context) {
-        match menu::show(ctx, &mut self.menu_open) {
+        let in_mb = self.settings.memory_unit == settings::MemoryUnit::Mb;
+        match menu::show(ctx, &mut self.menu_open, in_mb) {
             Some(MenuAction::New) => self.discard_then(Discarding::New),
             Some(MenuAction::Open) => self.open_dialog(),
             Some(MenuAction::Save) => self.save(false),
@@ -673,6 +675,16 @@ impl VolcasmApp {
                 } else {
                     settings::Theme::Dark
                 });
+                if let Err(err) = self.settings.save() {
+                    self.error(format!("{}: {err}", style::caps("Cannot save settings")));
+                }
+            }
+            Some(MenuAction::MemoryInMb(mb)) => {
+                self.settings.memory_unit = if mb {
+                    settings::MemoryUnit::Mb
+                } else {
+                    settings::MemoryUnit::Blocks
+                };
                 if let Err(err) = self.settings.save() {
                     self.error(format!("{}: {err}", style::caps("Cannot save settings")));
                 }
@@ -789,17 +801,28 @@ const METERS_WIDTH: f32 = 2.0 * METER_WIDTH + 16.0;
 const METER_WIDTH: f32 = 228.0;
 
 /// The memory and duration meters, right-aligned in the top bar.
-fn meters(ui: &mut egui::Ui, state: &AppState) {
+/// `in_mb`: memory in megabytes instead of device blocks.
+fn meters(ui: &mut egui::Ui, state: &AppState, in_mb: bool) {
     let width = METER_WIDTH;
     let device = state.project.device();
 
     let memory = state.memory();
-    let text = format!(
-        "MEMORY {} / {} BLK · {:.2} MB",
-        memory.used_blocks,
-        memory.total_blocks,
-        memory.used_blocks as f64 * f64::from(device.memory.block_size) / 1e6
-    );
+    let text = if in_mb {
+        // Whole blocks, as the device fills its memory.
+        let mb = |blocks: u64| blocks as f64 * f64::from(device.memory.block_size) / 1e6;
+        format!(
+            "MEMORY {:.2} / {:.2} MB",
+            mb(memory.used_blocks),
+            mb(memory.total_blocks)
+        )
+    } else {
+        format!(
+            "MEMORY {} / {} BLK · {:.2} MB",
+            memory.used_blocks,
+            memory.total_blocks,
+            memory.used_blocks as f64 * f64::from(device.memory.block_size) / 1e6
+        )
+    };
     let fraction = memory.used_blocks as f32 / memory.total_blocks.max(1) as f32;
     meter(ui, width, fraction, &text, memory.fits());
 

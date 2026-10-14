@@ -13,11 +13,24 @@ pub enum Theme {
     Light,
 }
 
+/// Unit of the memory meter.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MemoryUnit {
+    /// Device blocks (4096 B), the unit the device counts in.
+    #[default]
+    Blocks,
+    /// Megabytes (10^6 B).
+    Mb,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Settings {
     /// `None` until the user picks one: follow the system.
     #[serde(default)]
     pub theme: Option<Theme>,
+    #[serde(default)]
+    pub memory_unit: MemoryUnit,
 }
 
 fn path() -> Option<PathBuf> {
@@ -123,9 +136,17 @@ mod tests {
     fn theme_round_trip_and_defaults() {
         let s = Settings {
             theme: Some(Theme::Light),
+            memory_unit: MemoryUnit::Mb,
         };
         let json = serde_json::to_string(&s).unwrap();
-        assert_eq!(json, r#"{"theme":"light"}"#);
+        assert_eq!(json, r#"{"theme":"light","memory_unit":"mb"}"#);
+        // Files written before the memory unit existed still load.
+        assert_eq!(
+            serde_json::from_str::<Settings>(r#"{"theme":"dark"}"#)
+                .unwrap()
+                .memory_unit,
+            MemoryUnit::Blocks
+        );
         assert_eq!(serde_json::from_str::<Settings>(&json).unwrap(), s);
         assert_eq!(
             serde_json::from_str::<Settings>("{}").unwrap(),

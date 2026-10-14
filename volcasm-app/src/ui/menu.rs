@@ -18,11 +18,14 @@ pub enum MenuAction {
     SaveAs,
     /// Switch to the light theme (`true`) or the dark one.
     Theme(bool),
+    /// Show the memory meter in megabytes (`true`) or blocks.
+    MemoryInMb(bool),
 }
 
 /// Shows the menu while `open` (or sliding out). Sets `open` to false when
 /// it should close; returns the chosen action.
-pub fn show(ctx: &egui::Context, open: &mut bool) -> Option<MenuAction> {
+/// `memory_in_mb`: the current memory meter unit, for the toggle.
+pub fn show(ctx: &egui::Context, open: &mut bool, memory_in_mb: bool) -> Option<MenuAction> {
     let t = ctx.animate_bool_with_time(Id::new("menu-anim"), *open, ANIMATION);
     if t <= 0.0 {
         return None;
@@ -88,6 +91,18 @@ pub fn show(ctx: &egui::Context, open: &mut bool) -> Option<MenuAction> {
                         let text = egui::RichText::new(style::caps(name)).size(16.0);
                         if ui.selectable_label(light == value, text).clicked() && light != value {
                             action = Some(MenuAction::Theme(value));
+                        }
+                    }
+                });
+                ui.add_space(8.0);
+                ui.label(style::label("Memory shown in"));
+                ui.horizontal(|ui| {
+                    for (name, value) in [("blocks", false), ("mb", true)] {
+                        let text = egui::RichText::new(style::caps(name)).size(16.0);
+                        if ui.selectable_label(memory_in_mb == value, text).clicked()
+                            && memory_in_mb != value
+                        {
+                            action = Some(MenuAction::MemoryInMb(value));
                         }
                     }
                 });

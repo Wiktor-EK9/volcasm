@@ -41,6 +41,9 @@ pub fn show(
     subsection(ui, "samples");
     ui.horizontal_wrapped(|ui| {
         ui.label(style::label(&format!("{} checked", state.checked.len())));
+        if ui.small_button(style::label("Check all")).clicked() {
+            state.check_all();
+        }
         if ui.small_button(style::label("Check filled")).clicked() {
             state.check_filled();
         }

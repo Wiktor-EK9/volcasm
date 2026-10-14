@@ -187,6 +187,11 @@ impl AppState {
         }
     }
 
+    /// Checks every slot, filled or empty.
+    pub fn check_all(&mut self) {
+        self.checked = (0..self.slot_count()).collect();
+    }
+
     /// Checks every filled slot.
     pub fn check_filled(&mut self) {
         self.checked = self.project.slots().map(|(n, _)| n).collect();
@@ -653,6 +658,13 @@ mod tests {
         assert_eq!(s.transfer_targets(), [Target::Sample(0), Target::Erase(5)]);
         s.check_filled();
         assert_eq!(s.transfer_targets(), [Target::Sample(0), Target::Sample(9)]);
+        s.check_all();
+        assert_eq!(s.checked.len(), s.slot_count());
+        s.transfer.erase_empty = false;
+        assert_eq!(s.transfer_targets(), [Target::Sample(0), Target::Sample(9)]);
+        s.transfer.erase_empty = true;
+        assert_eq!(s.transfer_targets().len(), s.slot_count());
+        s.check_filled();
         s.toggle_checked(0);
         assert_eq!(s.transfer_targets(), [Target::Sample(9)]);
         s.toggle_checked_pattern(4);

@@ -62,6 +62,8 @@ enum Discarding {
 struct ImportJob {
     slot: usize,
     name: String,
+    /// Select the slot when loaded (the first of several files).
+    select: bool,
     rx: Receiver<Result<Sample, String>>,
 }
 
@@ -302,7 +304,7 @@ impl VolcasmApp {
     }
 
     /// Imports an audio file into `slot` in the background.
-    fn load_sample(&mut self, slot: usize, path: PathBuf) {
+    fn load_sample(&mut self, slot: usize, path: PathBuf, select: bool) {
         let rate = self.state.project.device().sample_rate;
         let (tx, rx) = mpsc::channel();
         let name = name_from_path(&path);
@@ -310,15 +312,37 @@ impl VolcasmApp {
             let _ = tx.send(import::import_file(&path, rate).map_err(|e| e.to_string()));
         });
         self.info(format!("{} {name} → {slot}", style::caps("Loading")));
-        self.imports.push(ImportJob { slot, name, rx });
+        self.imports.push(ImportJob {
+            slot,
+            name,
+            select,
+            rx,
+        });
+    }
+
+    /// Imports audio files: the first (by file name) into `first`, the
+    /// others into the nearest free slots after it.
+    fn load_samples(&mut self, first: usize, mut paths: Vec<PathBuf>) {
+        paths.sort();
+        let busy: Vec<usize> = self.imports.iter().map(|job| job.slot).collect();
+        let slots = self.state.slots_for_files(first, paths.len(), &busy);
+        let skipped = paths.len() - slots.len();
+        for (i, (slot, path)) in slots.into_iter().zip(paths).enumerate() {
+            self.load_sample(slot, path, i == 0);
+        }
+        if skipped > 0 {
+            self.error(style::caps(&format!(
+                "No free slot for {skipped} of the files"
+            )));
+        }
     }
 
     fn pick_sample(&mut self, slot: usize) {
-        if let Some(path) = rfd::FileDialog::new()
+        if let Some(paths) = rfd::FileDialog::new()
             .add_filter("Audio", &AUDIO_EXTENSIONS)
-            .pick_file()
+            .pick_files()
         {
-            self.load_sample(slot, path);
+            self.load_samples(slot, paths);
         }
     }
 
@@ -341,7 +365,9 @@ impl VolcasmApp {
                         job.name,
                         job.slot
                     ));
-                    self.state.select(job.slot);
+                    if job.select {
+                        self.state.select(job.slot);
+                    }
                 }
                 Err(err) => self.error(format!(
                     "{} {}: {err}",
@@ -588,6 +614,7 @@ impl VolcasmApp {
         self.imports.push(ImportJob {
             slot: active.slot,
             name: "Recording".into(),
+            select: true,
             rx,
         });
     }
@@ -642,6 +669,7 @@ impl VolcasmApp {
                 .map(|f| f.path().to_path_buf())
                 .collect()
         });
+        let mut audio = Vec::new();
         for path in dropped {
             let ext = path
                 .extension()
@@ -650,16 +678,20 @@ impl VolcasmApp {
             match ext.as_str() {
                 "volcasm" => self.discard_then(Discarding::Open(path)),
                 "vsj" => self.discard_then(Discarding::Import(path)),
-                _ => {
-                    let slot = self.state.selected.or_else(|| {
-                        (0..self.state.slot_count()).find(|&n| self.state.project.slot(n).is_none())
-                    });
-                    match slot {
-                        Some(slot) => self.load_sample(slot, path),
-                        None => self.error(style::caps("No free slot for the dropped file")),
-                    }
-                }
+                _ => audio.push(path),
             }
+        }
+        if audio.is_empty() {
+            return;
+        }
+        let busy: Vec<usize> = self.imports.iter().map(|job| job.slot).collect();
+        let first = self.state.selected.or_else(|| {
+            (0..self.state.slot_count())
+                .find(|&n| self.state.project.slot(n).is_none() && !busy.contains(&n))
+        });
+        match first {
+            Some(first) => self.load_samples(first, audio),
+            None => self.error(style::caps("No free slot for the dropped files")),
         }
     }
 

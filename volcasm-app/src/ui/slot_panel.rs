@@ -44,6 +44,9 @@ pub fn show(
         style::subsection(ui, "empty slot");
         if ui
             .button(style::icon_label(style::icon::FILE_AUDIO, "Load file…"))
+            .on_hover_text(style::caps(
+                "several files go to this slot and the next free ones",
+            ))
             .clicked()
         {
             actions.push(PanelAction::LoadFile(n));

@@ -187,6 +187,21 @@ impl AppState {
         }
     }
 
+    /// Slots for `count` files loaded at once: `first`, then the nearest
+    /// free slots after it, wrapping around to slot 0. Slots in `busy`
+    /// (imports in progress) count as taken. Shorter than `count` when there
+    /// are not enough free slots.
+    pub fn slots_for_files(&self, first: usize, count: usize, busy: &[usize]) -> Vec<usize> {
+        if count == 0 {
+            return Vec::new();
+        }
+        let n = self.slot_count();
+        let free = (1..n)
+            .map(|k| (first + k) % n)
+            .filter(|&s| self.project.slot(s).is_none() && !busy.contains(&s));
+        std::iter::once(first).chain(free).take(count).collect()
+    }
+
     /// Checks every slot, filled or empty.
     pub fn check_all(&mut self) {
         self.checked = (0..self.slot_count()).collect();
@@ -644,6 +659,22 @@ mod tests {
         assert!(s.pattern_warnings().is_empty());
         s.edit_pattern(("y", 0, 0), |p| p.set_active_steps(0));
         assert_eq!(s.pattern_warnings(), ["no active step"]);
+    }
+
+    #[test]
+    fn slots_for_files() {
+        let mut s = AppState::default();
+        let n = s.slot_count();
+        s.set_sample(5, "a".into(), sample(&[1])).unwrap();
+        s.set_sample(7, "b".into(), sample(&[1])).unwrap();
+        // The selected slot even when filled, then free slots after it.
+        assert_eq!(s.slots_for_files(5, 3, &[]), [5, 6, 8]);
+        assert_eq!(s.slots_for_files(5, 3, &[6]), [5, 8, 9]);
+        assert_eq!(s.slots_for_files(5, 0, &[]), [] as [usize; 0]);
+        // Wraps around to slot 0.
+        assert_eq!(s.slots_for_files(n - 1, 3, &[]), [n - 1, 0, 1]);
+        // Never more than the free slots.
+        assert_eq!(s.slots_for_files(0, 1000, &[]).len(), n - 2);
     }
 
     #[test]

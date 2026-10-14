@@ -201,6 +201,9 @@ pub fn install(ctx: &egui::Context, light: bool) {
             .text_styles
             .insert(egui::TextStyle::Heading, FontId::proportional(20.0));
         style.spacing.button_padding = egui::vec2(8.0, 4.0);
+        // Scroll bars take their own room instead of floating over the
+        // content, where they would cover e.g. the waveform's end handle.
+        style.spacing.scroll = egui::style::ScrollStyle::solid();
     });
 }
 

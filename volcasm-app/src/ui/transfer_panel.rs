@@ -39,8 +39,8 @@ pub fn show(
     let patterns = state.project.patterns().len();
 
     subsection(ui, "samples");
+    ui.label(style::label(&format!("{} checked", state.checked.len())));
     ui.horizontal_wrapped(|ui| {
-        ui.label(style::label(&format!("{} checked", state.checked.len())));
         if ui.small_button(style::label("Check all")).clicked() {
             state.check_all();
         }

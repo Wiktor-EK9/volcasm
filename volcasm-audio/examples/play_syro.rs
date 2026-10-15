@@ -1,5 +1,6 @@
 //! Plays a SYRO stream WAV (from `syro_wav`) to the volca sample SYNC IN
-//! through PipeWire, after checking that the device runs at 44.1 kHz.
+//! after checking that the device runs at 44.1 kHz. `--status` needs
+//! PipeWire (Linux).
 //!
 //! Usage:
 //!   play_syro --list                      list audio outputs
@@ -13,8 +14,8 @@ use std::io::BufRead;
 use std::process::ExitCode;
 use std::time::Duration;
 
-use volcasm_audio::check::{self, STREAM_RATE};
-use volcasm_audio::{Phase, TransferOptions, graph, list_outputs};
+use volcasm_audio::check::STREAM_RATE;
+use volcasm_audio::{Phase, TransferOptions, list_outputs};
 
 fn read_stream(path: &str) -> Result<Vec<[i16; 2]>, Box<dyn Error>> {
     let mut reader = hound::WavReader::open(path)?;
@@ -36,31 +37,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             }
             return Ok(());
         }
-        [flag] if flag == "--status" => {
-            let snapshot = graph::snapshot()?;
-            println!("{:?}", snapshot.clock);
-            match check::clock_reachable(&snapshot.clock) {
-                Ok(()) => println!("clock: can run at {STREAM_RATE} Hz"),
-                Err(problem) => println!("clock: {problem}"),
-            }
-            for node in &snapshot.nodes {
-                if node.prop("media.class") != Some("Audio/Sink") {
-                    continue;
-                }
-                let support = match node.supports_rate(STREAM_RATE) {
-                    Some(true) => "supports",
-                    Some(false) => "does NOT support",
-                    None => "unknown support for",
-                };
-                println!(
-                    "{}: {support} {STREAM_RATE} Hz, rates {:?}, current {:?}",
-                    node.prop("node.description").unwrap_or("?"),
-                    node.rates,
-                    node.format.map(|f| f.rate)
-                );
-            }
-            return Ok(());
-        }
+        [flag] if flag == "--status" => return status(),
         [flag, id, path] if flag == "--device" => (Some(id.clone()), path),
         [path] if !path.starts_with('-') => (None, path),
         _ => return Err(usage.into()),
@@ -125,4 +102,39 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// Prints the PipeWire clock settings and the rates of the outputs.
+#[cfg(target_os = "linux")]
+fn status() -> Result<(), Box<dyn Error>> {
+    use volcasm_audio::{check, graph};
+
+    let snapshot = graph::snapshot()?;
+    println!("{:?}", snapshot.clock);
+    match check::clock_reachable(&snapshot.clock) {
+        Ok(()) => println!("clock: can run at {STREAM_RATE} Hz"),
+        Err(problem) => println!("clock: {problem}"),
+    }
+    for node in &snapshot.nodes {
+        if node.prop("media.class") != Some("Audio/Sink") {
+            continue;
+        }
+        let support = match node.supports_rate(STREAM_RATE) {
+            Some(true) => "supports",
+            Some(false) => "does NOT support",
+            None => "unknown support for",
+        };
+        println!(
+            "{}: {support} {STREAM_RATE} Hz, rates {:?}, current {:?}",
+            node.prop("node.description").unwrap_or("?"),
+            node.rates,
+            node.format.map(|f| f.rate)
+        );
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn status() -> Result<(), Box<dyn Error>> {
+    Err("--status needs PipeWire (Linux)".into())
 }

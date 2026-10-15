@@ -1225,6 +1225,16 @@ impl eframe::App for VolcasmApp {
                                 }
                                 Err(err) => self.error(err),
                             },
+                            PanelAction::Paste(slot) => match self.state.paste_sample(slot) {
+                                Ok(true) => {
+                                    if self.preview.as_ref().is_some_and(|(n, _)| *n == slot) {
+                                        self.preview = None;
+                                    }
+                                    self.info(style::caps(&format!("Pasted into slot {slot}")));
+                                }
+                                Ok(false) => {}
+                                Err(err) => self.error(err),
+                            },
                             PanelAction::Undo(slot) => {
                                 if self.state.undo(slot) {
                                     self.info(style::caps(&format!("Undo in slot {slot}")));

@@ -94,6 +94,8 @@ pub struct AppState {
     /// Sequences checked for transfer (0-based).
     pub checked_patterns: BTreeSet<usize>,
     pub clipboard: Option<Pattern>,
+    /// Sample copied with COPY in the slot panel.
+    pub sample_clipboard: Option<Slot>,
     /// Previous versions of each pattern, newest last.
     pattern_history: HashMap<usize, Vec<Pattern>>,
     last_edit: Option<(usize, EditKey)>,
@@ -130,6 +132,7 @@ impl AppState {
             motion_rows: [MotionRow::LevelStart; PARTS],
             checked_patterns: BTreeSet::new(),
             clipboard: None,
+            sample_clipboard: None,
             pattern_history: HashMap::new(),
             last_edit: None,
             scroll_to_part: None,
@@ -239,6 +242,23 @@ impl AppState {
         self.selected = Some(to);
         self.trim = None;
         true
+    }
+
+    /// Copies the sample in `slot` (name and audio) for [`Self::paste_sample`].
+    pub fn copy_sample(&mut self, slot: usize) {
+        if let Some(content) = self.project.slot(slot) {
+            self.sample_clipboard = Some(content.clone());
+        }
+    }
+
+    /// Puts the copied sample into `slot`; [`Self::undo`] restores the
+    /// previous content. Returns false when nothing was copied.
+    pub fn paste_sample(&mut self, slot: usize) -> Result<bool, String> {
+        let Some(content) = self.sample_clipboard.clone() else {
+            return Ok(false);
+        };
+        self.set_sample(slot, content.name, content.sample)?;
+        Ok(true)
     }
 
     /// Checks every slot, filled or empty.
@@ -698,6 +718,27 @@ mod tests {
         assert!(s.pattern_warnings().is_empty());
         s.edit_pattern(("y", 0, 0), |p| p.set_active_steps(0));
         assert_eq!(s.pattern_warnings(), ["no active step"]);
+    }
+
+    #[test]
+    fn copy_and_paste_sample() {
+        let mut s = AppState::default();
+        assert_eq!(s.paste_sample(1), Ok(false));
+        s.set_sample(0, "a".into(), sample(&[1, 2])).unwrap();
+        s.set_sample(1, "b".into(), sample(&[3])).unwrap();
+        s.copy_sample(0);
+        // Copying an empty slot keeps the clipboard.
+        s.copy_sample(5);
+        assert_eq!(s.paste_sample(1), Ok(true));
+        assert_eq!(s.project.slot(1).unwrap().name, "a");
+        assert_eq!(s.project.slot(1).unwrap().sample.pcm, [1, 2]);
+        assert_eq!(s.paste_sample(7), Ok(true));
+        assert_eq!(s.project.slot(7).unwrap().name, "a");
+        // Undo brings back what was there.
+        assert!(s.undo(1));
+        assert_eq!(s.project.slot(1).unwrap().name, "b");
+        assert!(s.undo(7));
+        assert!(s.project.slot(7).is_none());
     }
 
     #[test]

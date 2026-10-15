@@ -15,6 +15,7 @@ pub enum PanelAction {
     Normalize,
     Pitch,
     Undo(usize),
+    Paste(usize),
 }
 
 /// Name being edited, kept between frames.
@@ -42,21 +43,35 @@ pub fn show(
 
     let Some(slot) = state.project.slot(n) else {
         style::subsection(ui, "empty slot");
-        if ui
-            .button(style::icon_label(style::icon::FILE_AUDIO, "Load file…"))
-            .on_hover_text(style::caps(
-                "several files go to this slot and the next free ones",
-            ))
-            .clicked()
-        {
-            actions.push(PanelAction::LoadFile(n));
-        }
+        ui.horizontal_wrapped(|ui| {
+            if ui
+                .button(style::icon_label(style::icon::FILE_AUDIO, "Load file…"))
+                .on_hover_text(style::caps(
+                    "several files go to this slot and the next free ones",
+                ))
+                .clicked()
+            {
+                actions.push(PanelAction::LoadFile(n));
+            }
+            if let Some(copied) = &state.sample_clipboard
+                && ui
+                    .button(style::icon_label(style::icon::CLIPBOARD_TEXT, "Paste"))
+                    .on_hover_text(&copied.name)
+                    .clicked()
+            {
+                actions.push(PanelAction::Paste(n));
+            }
+        });
         ui.label(
             style::label("or drop an audio file on the window")
                 .small()
                 .color(style::text_dim()),
         );
-        if state.can_undo(n) && ui.button(style::label("Undo")).clicked() {
+        if state.can_undo(n)
+            && ui
+                .button(style::icon_label(style::icon::ARROW_U_UP_LEFT, "Undo"))
+                .clicked()
+        {
             actions.push(PanelAction::Undo(n));
         }
         return actions;
@@ -172,17 +187,41 @@ pub fn show(
         if ui.button(style::label("Normalize")).clicked() {
             actions.push(PanelAction::Normalize);
         }
+        if ui.button(style::label("Replace")).clicked() {
+            actions.push(PanelAction::LoadFile(n));
+        }
+    });
+    // Same buttons, in the same order, as for sequences.
+    ui.horizontal_wrapped(|ui| {
         if ui
-            .add_enabled(state.can_undo(n), egui::Button::new(style::label("Undo")))
+            .button(style::icon_label(style::icon::COPY, "Copy"))
+            .clicked()
+        {
+            state.copy_sample(n);
+        }
+        if ui
+            .add_enabled(
+                state.sample_clipboard.is_some(),
+                egui::Button::new(style::icon_label(style::icon::CLIPBOARD_TEXT, "Paste")),
+            )
+            .clicked()
+        {
+            actions.push(PanelAction::Paste(n));
+        }
+        if ui
+            .button(style::icon_label(style::icon::TRASH, "Clear"))
+            .clicked()
+        {
+            actions.push(PanelAction::Clear(n));
+        }
+        if ui
+            .add_enabled(
+                state.can_undo(n),
+                egui::Button::new(style::icon_label(style::icon::ARROW_U_UP_LEFT, "Undo")),
+            )
             .clicked()
         {
             actions.push(PanelAction::Undo(n));
-        }
-        if ui.button(style::label("Replace…")).clicked() {
-            actions.push(PanelAction::LoadFile(n));
-        }
-        if ui.button(style::label("Clear")).clicked() {
-            actions.push(PanelAction::Clear(n));
         }
     });
     actions

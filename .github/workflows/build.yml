@@ -22,7 +22,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libpipewire-0.3-dev libclang-dev pkg-config
+          sudo apt-get install -y libasound2-dev libpipewire-0.3-dev libclang-dev pkg-config desktop-file-utils
       - run: cargo test --workspace
       - run: cargo build --release -p volcasm-app
       - name: Build AppImage

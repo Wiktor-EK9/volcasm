@@ -18,8 +18,8 @@ fn main() {
 
     // The SDK predates C23 (`typedef int bool` in korg_syro_type.h), so pin the
     // dialect GCC defaulted to at the time (MSVC has no C23 `bool` keyword
-    // and no such dialect). Vendored code is left untouched, hence warnings
-    // are silenced.
+    // and no such dialect). Vendored code is left untouched apart from
+    // `patches/` (D24), hence warnings are silenced.
     let mut build = cc::Build::new();
     build.include(SYRO_DIR).warnings(false);
     if !build.get_compiler().is_like_msvc() {

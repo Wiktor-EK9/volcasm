@@ -1,1 +1,6 @@
 korginc/volcasample @ b0ed615f18c230a18b378d9ddc6a936971597e4e (2014-12-10)
+
+Local changes (D24), each also in volcasm-syro-sys/patches/:
+- 0001-comp-bitbase-bounds.patch: syro/korg_syro_comp.c, SyroComp_CompBlock
+  read pBitBase[4] (one past the end) after the 4th bit base; the result
+  depended on stack contents. Bounds check added.

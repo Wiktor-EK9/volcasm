@@ -9,7 +9,7 @@ name = "volcasm"
 path = "src/main.rs"
 
 [dependencies]
-eframe = { version = "0.36.2", default-features = false, features = ["glow", "wayland", "x11", "accesskit"] }
+eframe = { version = "0.36.2", default-features = false, features = ["glow", "wayland", "x11", "accesskit", "links"] }
 egui-phosphor = { version = "0.14.0", default-features = false, features = ["regular"] }
 image = { version = "0.25.10", default-features = false, features = ["png"] }
 rfd = { version = "0.17.2", default-features = false, features = ["xdg-portal"] }

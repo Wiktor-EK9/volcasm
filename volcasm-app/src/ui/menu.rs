@@ -59,61 +59,69 @@ pub fn show(ctx: &egui::Context, open: &mut bool, memory_in_mb: bool) -> Option<
             ui.painter().rect_filled(rect, 0.0, style::panel());
             ui.set_min_size(rect.size());
             ui.set_max_width(WIDTH);
-            egui::Frame::new().inner_margin(16.0).show(ui, |ui| {
-                ui.set_width(WIDTH - 32.0);
-                ui.label(style::brand("volcasm", 30.0).color(style::ACCENT));
-                ui.add_space(16.0);
-                let item = |ui: &mut egui::Ui, icon: &str, text: &str| {
-                    ui.add(
-                        egui::Button::new(style::icon_label(icon, text).size(18.0))
-                            .min_size(vec2(ui.available_width(), 36.0)),
-                    )
-                    .clicked()
-                };
-                for (icon, text, chosen) in [
-                    (style::icon::FILE_PLUS, "new file", MenuAction::New),
-                    (style::icon::FOLDER_OPEN, "open…", MenuAction::Open),
-                    (style::icon::FLOPPY_DISK, "save", MenuAction::Save),
-                    (
-                        style::icon::FLOPPY_DISK_BACK,
-                        "save as…",
-                        MenuAction::SaveAs,
-                    ),
-                ] {
-                    if item(ui, icon, text) {
-                        action = Some(chosen);
-                    }
-                    ui.add_space(4.0);
-                }
-                ui.add_space(16.0);
-                ui.separator();
-                ui.add_space(8.0);
-                ui.label(style::label("Theme"));
-                ui.horizontal(|ui| {
-                    let light = style::is_light();
-                    for (icon, name, value) in [
-                        (style::icon::MOON, "dark", false),
-                        (style::icon::SUN, "light", true),
-                    ] {
-                        let text = style::icon_label(icon, name).size(16.0);
-                        if ui.selectable_label(light == value, text).clicked() && light != value {
-                            action = Some(MenuAction::Theme(value));
+            // Scrolls when the window is too low for the whole menu.
+            egui::ScrollArea::vertical()
+                .max_height(screen.height())
+                .show(ui, |ui| {
+                    egui::Frame::new().inner_margin(16.0).show(ui, |ui| {
+                        ui.set_width(WIDTH - 32.0);
+                        ui.label(style::brand("volcasm", 30.0).color(style::ACCENT));
+                        ui.add_space(16.0);
+                        let item = |ui: &mut egui::Ui, icon: &str, text: &str| {
+                            ui.add(
+                                egui::Button::new(style::icon_label(icon, text).size(18.0))
+                                    .min_size(vec2(ui.available_width(), 36.0)),
+                            )
+                            .clicked()
+                        };
+                        for (icon, text, chosen) in [
+                            (style::icon::FILE_PLUS, "new file", MenuAction::New),
+                            (style::icon::FOLDER_OPEN, "open…", MenuAction::Open),
+                            (style::icon::FLOPPY_DISK, "save", MenuAction::Save),
+                            (
+                                style::icon::FLOPPY_DISK_BACK,
+                                "save as…",
+                                MenuAction::SaveAs,
+                            ),
+                        ] {
+                            if item(ui, icon, text) {
+                                action = Some(chosen);
+                            }
+                            ui.add_space(4.0);
                         }
-                    }
+                        ui.add_space(16.0);
+                        ui.separator();
+                        ui.add_space(8.0);
+                        ui.label(style::label("Theme"));
+                        ui.horizontal(|ui| {
+                            let light = style::is_light();
+                            for (icon, name, value) in [
+                                (style::icon::MOON, "dark", false),
+                                (style::icon::SUN, "light", true),
+                            ] {
+                                let text = style::icon_label(icon, name).size(16.0);
+                                if ui.selectable_label(light == value, text).clicked()
+                                    && light != value
+                                {
+                                    action = Some(MenuAction::Theme(value));
+                                }
+                            }
+                        });
+                        ui.add_space(8.0);
+                        ui.label(style::label("Memory shown in"));
+                        ui.horizontal(|ui| {
+                            for (name, value) in [("blocks", false), ("mb", true)] {
+                                let text = egui::RichText::new(style::caps(name)).size(16.0);
+                                if ui.selectable_label(memory_in_mb == value, text).clicked()
+                                    && memory_in_mb != value
+                                {
+                                    action = Some(MenuAction::MemoryInMb(value));
+                                }
+                            }
+                        });
+                        about(ui);
+                    });
                 });
-                ui.add_space(8.0);
-                ui.label(style::label("Memory shown in"));
-                ui.horizontal(|ui| {
-                    for (name, value) in [("blocks", false), ("mb", true)] {
-                        let text = egui::RichText::new(style::caps(name)).size(16.0);
-                        if ui.selectable_label(memory_in_mb == value, text).clicked()
-                            && memory_in_mb != value
-                        {
-                            action = Some(MenuAction::MemoryInMb(value));
-                        }
-                    }
-                });
-            });
         });
 
     if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
@@ -123,4 +131,50 @@ pub fn show(ctx: &egui::Context, open: &mut bool, memory_in_mb: bool) -> Option<
         *open = false;
     }
     action
+}
+
+const GITHUB: &str = "https://github.com/Wiktor-EK9/volcasm";
+const WEBSITE: &str = "https://volcasm.wmachalica.pl";
+
+/// Program name, author, links and credits for the work Volcasm builds on.
+fn about(ui: &mut egui::Ui) {
+    ui.add_space(16.0);
+    style::subsection(ui, "about");
+    ui.label(
+        style::label(&format!(
+            "volcasm {} · {}",
+            env!("CARGO_PKG_VERSION"),
+            env!("CARGO_PKG_LICENSE")
+        ))
+        .size(16.0),
+    );
+    ui.label(style::label("by Wiktor Machalica").size(16.0));
+    ui.add_space(4.0);
+    ui.horizontal(|ui| {
+        ui.hyperlink_to(
+            style::icon_label(style::icon::GITHUB_LOGO, "GitHub")
+                .size(16.0)
+                .color(style::ACCENT),
+            GITHUB,
+        );
+        ui.add_space(12.0);
+        ui.hyperlink_to(
+            style::icon_label(style::icon::GLOBE, "Website")
+                .size(16.0)
+                .color(style::ACCENT),
+            WEBSITE,
+        );
+    });
+    ui.add_space(8.0);
+    style::subsection(ui, "credits");
+    for line in [
+        "SYRO: Korg Inc. (BSD-3-Clause)",
+        "Fonts: Overpass, Barlow Semi Condensed, DSEG7 (SIL OFL 1.1)",
+        "Icons: Phosphor (MIT)",
+        "GUI: egui / eframe (MIT/Apache-2.0)",
+        "Inspired by Vosyr (Frederikson Labs)",
+        "and Volca Sampler (B. Wiley)",
+    ] {
+        ui.label(style::label(line).small().color(style::text_dim()));
+    }
 }

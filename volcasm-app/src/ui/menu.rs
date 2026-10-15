@@ -20,6 +20,8 @@ pub enum MenuAction {
     Theme(bool),
     /// Show the memory meter in megabytes (`true`) or blocks.
     MemoryInMb(bool),
+    /// Close the program (asks first about unsaved changes).
+    Quit,
 }
 
 /// Shows the menu while `open` (or sliding out). Sets `open` to false when
@@ -120,6 +122,12 @@ pub fn show(ctx: &egui::Context, open: &mut bool, memory_in_mb: bool) -> Option<
                             }
                         });
                         about(ui);
+                        ui.add_space(16.0);
+                        ui.separator();
+                        ui.add_space(8.0);
+                        if item(ui, style::icon::SIGN_OUT, "quit") {
+                            action = Some(MenuAction::Quit);
+                        }
                     });
                 });
         });

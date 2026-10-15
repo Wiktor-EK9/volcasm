@@ -843,6 +843,8 @@ impl VolcasmApp {
             Some(MenuAction::Open) => self.open_dialog(),
             Some(MenuAction::Save) => self.save(false),
             Some(MenuAction::SaveAs) => self.save(true),
+            // Same path as closing the window: asks about unsaved changes.
+            Some(MenuAction::Quit) => ctx.send_viewport_cmd(ViewportCommand::Close),
             Some(MenuAction::Theme(light)) => {
                 style::set_light(ctx, light);
                 self.settings.theme = Some(if light {

@@ -52,8 +52,9 @@ pub enum SyroError {
     NotEnoughMemory,
     InvalidHandle,
     NoData,
-    /// Status code not defined by the SDK header.
-    Unknown(u32),
+    /// Status code not defined by the SDK header. The C enum is unsigned with
+    /// GCC and signed with MSVC; i64 holds both.
+    Unknown(i64),
     /// Sample is too large to describe in a `SyroData` (over 4 GiB).
     SampleTooLarge,
 }
@@ -69,7 +70,7 @@ impl SyroError {
             sys::Status_NotEnoughMemory => Self::NotEnoughMemory,
             sys::Status_InvalidHandle => Self::InvalidHandle,
             sys::Status_NoData => Self::NoData,
-            other => Self::Unknown(other),
+            other => Self::Unknown(other.into()),
         }
     }
 }

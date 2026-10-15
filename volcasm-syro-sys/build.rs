@@ -17,10 +17,14 @@ fn main() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
 
     // The SDK predates C23 (`typedef int bool` in korg_syro_type.h), so pin the
-    // dialect GCC defaulted to at the time. Vendored code is left untouched,
-    // hence warnings are silenced.
+    // dialect GCC defaulted to at the time (MSVC has no C23 `bool` keyword
+    // and no such dialect). Vendored code is left untouched, hence warnings
+    // are silenced.
     let mut build = cc::Build::new();
-    build.include(SYRO_DIR).std("gnu11").warnings(false);
+    build.include(SYRO_DIR).warnings(false);
+    if !build.get_compiler().is_like_msvc() {
+        build.std("gnu11");
+    }
     for src in SYRO_SOURCES {
         build.file(format!("{SYRO_DIR}/{src}"));
     }
@@ -50,9 +54,20 @@ fn main() {
 /// Builds the unmodified SDK example (`syro_volcasample_example`) as the
 /// reference for bit-exact stream comparisons in tests.
 fn build_reference_example(build: &cc::Build, out_dir: &std::path::Path) {
-    let exe = out_dir.join("syro_volcasample_example");
-    let mut cmd: Command = build.get_compiler().to_command();
-    cmd.arg("-std=gnu11").arg("-w").arg("-o").arg(&exe);
+    let compiler = build.get_compiler();
+    let mut cmd: Command = compiler.to_command();
+    let exe = if compiler.is_like_msvc() {
+        let exe = out_dir.join("syro_volcasample_example.exe");
+        cmd.arg("/nologo")
+            .arg("/w")
+            .arg(format!("/Fe{}", exe.display()));
+        cmd.arg(format!("/Fo{}\\", out_dir.display()));
+        exe
+    } else {
+        let exe = out_dir.join("syro_volcasample_example");
+        cmd.arg("-std=gnu11").arg("-w").arg("-o").arg(&exe);
+        exe
+    };
     for src in SYRO_SOURCES {
         cmd.arg(format!("{SYRO_DIR}/{src}"));
     }

@@ -1,5 +1,6 @@
 //! Settings remembered between runs: `$XDG_CONFIG_HOME/volcasm/settings.json`
-//! (or `~/.config/volcasm/settings.json`).
+//! (or `~/.config/volcasm/settings.json`); `%APPDATA%\volcasm\settings.json`
+//! on Windows.
 
 use std::path::PathBuf;
 
@@ -34,6 +35,9 @@ pub struct Settings {
 }
 
 fn path() -> Option<PathBuf> {
+    #[cfg(windows)]
+    let config = std::env::var_os("APPDATA").map(PathBuf::from)?;
+    #[cfg(not(windows))]
     let config = std::env::var_os("XDG_CONFIG_HOME")
         .filter(|v| !v.is_empty())
         .map(PathBuf::from)

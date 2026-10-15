@@ -1,5 +1,8 @@
 //! Volcasm: sample and pattern manager for the KORG volca sample.
 
+// No console window next to the program on Windows (release builds).
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 mod app;
 mod preview;
 mod settings;
@@ -17,6 +20,18 @@ const USAGE: &str = "usage: volcasm [project.volcasm | project.vsj] [--select <s
                      [--sequences] [--pattern <1-10>] [--params <part>] [--motion <part>] \
                      [--theme light|dark] [--menu] [--size <width>x<height>] \
                      [--screenshot <out.png>]";
+
+/// Window icon (taskbar on Windows; on Wayland the desktop file gives it).
+fn icon() -> egui::IconData {
+    let image = image::load_from_memory(include_bytes!("../assets/icon.png"))
+        .expect("bundled icon is a valid PNG")
+        .into_rgba8();
+    egui::IconData {
+        width: image.width(),
+        height: image.height(),
+        rgba: image.into_raw(),
+    }
+}
 
 fn parse_args() -> Result<(Options, Option<egui::Vec2>), String> {
     let mut options = Options::default();
@@ -87,7 +102,8 @@ fn main() -> ExitCode {
             .with_title("volcasm")
             .with_app_id("volcasm")
             .with_inner_size(size.unwrap_or(egui::vec2(1440.0, 900.0)))
-            .with_min_inner_size([900.0, 600.0]),
+            .with_min_inner_size([900.0, 600.0])
+            .with_icon(icon()),
         ..Default::default()
     };
     match eframe::run_native(

@@ -208,7 +208,10 @@ fn details(
                         }
                     }
                 });
-            if ui.small_button(style::label("Refresh")).clicked() {
+            if ui
+                .small_button(style::icon_label(style::icon::ARROWS_CLOCKWISE, "Refresh"))
+                .clicked()
+            {
                 action = Some(DialogAction::RefreshOutputs);
             }
         });

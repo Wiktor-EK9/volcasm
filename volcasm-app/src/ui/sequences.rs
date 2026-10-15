@@ -91,25 +91,31 @@ fn sequence_choice(ui: &mut Ui, state: &mut AppState) {
         }
     });
     ui.horizontal(|ui| {
-        if ui.button(style::label("Copy")).clicked() {
+        if ui
+            .button(style::icon_label(style::icon::COPY, "Copy"))
+            .clicked()
+        {
             state.copy_pattern();
         }
         if ui
             .add_enabled(
                 state.clipboard.is_some(),
-                egui::Button::new(style::label("Paste")),
+                egui::Button::new(style::icon_label(style::icon::CLIPBOARD_TEXT, "Paste")),
             )
             .clicked()
         {
             state.paste_pattern();
         }
-        if ui.button(style::label("Clear")).clicked() {
+        if ui
+            .button(style::icon_label(style::icon::TRASH, "Clear"))
+            .clicked()
+        {
             state.clear_pattern();
         }
         if ui
             .add_enabled(
                 state.can_undo_pattern(),
-                egui::Button::new(style::label("Undo")),
+                egui::Button::new(style::icon_label(style::icon::ARROW_U_UP_LEFT, "Undo")),
             )
             .clicked()
         {

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Volcasm
+Comment=Sample and pattern manager for the KORG volca sample
+Exec=volcasm %f
+Icon=volcasm
+Terminal=false
+Categories=AudioVideo;Audio;
+StartupWMClass=volcasm

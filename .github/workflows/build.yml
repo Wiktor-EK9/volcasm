@@ -1,0 +1,61 @@
+# Test builds for Linux (AppImage) and Windows (zip), D23. Started by hand
+# (Actions -> build -> Run workflow) or by pushing a `v*` tag. The packages
+# are uploaded as workflow artifacts.
+name: build
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  linux:
+    # Oldest supported runner: the AppImage needs glibc 2.35 or newer.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libpipewire-0.3-dev libclang-dev pkg-config
+      - run: cargo test --workspace
+      - run: cargo build --release -p volcasm-app
+      - name: Build AppImage
+        run: |
+          curl -sSfL -o appimagetool \
+            https://github.com/AppImage/appimagetool/releases/download/1.9.0/appimagetool-x86_64.AppImage
+          echo "46fdd785094c7f6e545b61afcfb0f3d98d8eab243f644b4b17698c01d06083d1  appimagetool" | sha256sum -c
+          chmod +x appimagetool
+          APPIMAGE_EXTRACT_AND_RUN=1 APPIMAGETOOL=./appimagetool packaging/appimage.sh
+          cp docs/testers.md dist/README.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: volcasm-linux-x86_64
+          path: dist/
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      # Test fixtures are compared byte for byte: no line ending conversion.
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --workspace
+      - run: cargo build --release -p volcasm-app
+      - name: Package
+        shell: bash
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
+          dir=dist/volcasm-$version-windows-x64
+          mkdir -p "$dir"
+          cp target/release/volcasm.exe "$dir/"
+          cp docs/testers.md "$dir/README.md"
+          packaging/licenses.sh "$dir/licenses"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: volcasm-windows-x64
+          path: dist/

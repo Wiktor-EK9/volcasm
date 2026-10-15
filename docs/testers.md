@@ -15,7 +15,7 @@ messages you see.
 2. Run it.
 
 Requirements: PipeWire (the default sound system on current distributions)
-and glibc 2.35 or newer (Ubuntu 22.04, Debian 12, Fedora 36 or newer).
+and glibc 2.39 or newer (Ubuntu 24.04, Debian 13, Fedora 40 or newer).
 If it does not start, install `libfuse2` (or `fuse2`), or run it with
 `--appimage-extract-and-run`.
 

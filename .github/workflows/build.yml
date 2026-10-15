@@ -13,8 +13,9 @@ env:
 
 jobs:
   linux:
-    # Oldest supported runner: the AppImage needs glibc 2.35 or newer.
-    runs-on: ubuntu-22.04
+    # The AppImage needs the runner's glibc (2.39) or newer. 22.04 is too old:
+    # the `pipewire` crate 0.10 needs newer headers than its PipeWire 0.3.48.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

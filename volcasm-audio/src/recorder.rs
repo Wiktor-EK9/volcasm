@@ -6,14 +6,14 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::{self, Receiver};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{DeviceId, HostId, InputCallbackInfo};
+use cpal::{DeviceId, InputCallbackInfo};
 
 use crate::output::{OutputInfo, TransferError};
 
-/// Lists PipeWire audio inputs (same shape as outputs). Outputs appear too,
+/// Lists audio inputs (same shape as outputs). On PipeWire outputs appear too,
 /// marked "(monitor)": recording one captures what the computer plays.
 pub fn list_inputs() -> Result<Vec<OutputInfo>, TransferError> {
-    let host = cpal::host_from_id(HostId::PipeWire)?;
+    let host = crate::host()?;
     let mut inputs = Vec::new();
     for device in host.input_devices()? {
         let mut name = device.description()?.name().to_owned();
@@ -50,7 +50,7 @@ impl Recorder {
     /// Starts recording from `device` (an id from [`list_inputs`]; the
     /// default input when `None`), keeping at most `max_seconds`.
     pub fn start(device: Option<&str>, max_seconds: f64) -> Result<Self, TransferError> {
-        let host = cpal::host_from_id(HostId::PipeWire)?;
+        let host = crate::host()?;
         let device = match device {
             Some(id) => host
                 .device_by_id(&id.parse::<DeviceId>()?)

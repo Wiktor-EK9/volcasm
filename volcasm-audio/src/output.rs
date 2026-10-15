@@ -1,10 +1,12 @@
-//! Playback of a SYRO stream through PipeWire (cpal), with verification that
-//! the device runs at 44.1 kHz before any data is sent.
+//! Playback of a SYRO stream through cpal, with verification that the device
+//! runs at 44.1 kHz before any data is sent.
 //!
-//! Sequence: stream start with silence (pre-roll) while the running graph is
-//! verified (device rate, clock settings, volumes), then the stream data,
-//! then silence until the device buffer has played out. The device is known
-//! only once the stream is linked, so all checks happen during the pre-roll.
+//! Sequence: stream start with silence (pre-roll) while the audio path is
+//! verified, then the stream data, then silence until the device buffer has
+//! played out. On Linux the running PipeWire graph is checked (device rate,
+//! clock settings, volumes); the device is known only once the stream is
+//! linked, so all checks happen during the pre-roll. On other systems the
+//! device mix format is checked.
 
 use std::fmt;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, AtomicUsize, Ordering};
@@ -13,14 +15,14 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{BufferSize, DeviceId, ErrorKind, HostId, OutputCallbackInfo, StreamConfig};
+use cpal::{BufferSize, DeviceId, ErrorKind, OutputCallbackInfo, StreamConfig};
 
 use crate::check::{self, Problem, STREAM_RATE, Warning};
-use crate::graph::{self, GraphError};
+use crate::graph::GraphError;
 
-/// How long the pre-roll waits for the graph to verify before giving up.
+/// How long the pre-roll waits for the audio path to verify before giving up.
 const VERIFY_TIMEOUT: Duration = Duration::from_secs(3);
-/// Interval between graph checks during the pre-roll.
+/// Interval between checks during the pre-roll.
 const VERIFY_INTERVAL: Duration = Duration::from_millis(100);
 /// Silence after the device delay, before the stream is closed.
 const TAIL_MARGIN: Duration = Duration::from_millis(250);
@@ -29,17 +31,17 @@ const MAX_DELAY: Duration = Duration::from_secs(2);
 /// Polling interval while the data is playing.
 const POLL_INTERVAL: Duration = Duration::from_millis(20);
 
-/// An audio output (PipeWire node) that can be passed to [`TransferOptions`].
+/// An audio output that can be passed to [`TransferOptions`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OutputInfo {
-    /// cpal device id, e.g. `pipewire:alsa_output....`.
+    /// cpal device id, e.g. `pipewire:alsa_output....` on Linux.
     pub id: String,
     pub name: String,
 }
 
-/// Lists PipeWire audio outputs.
+/// Lists audio outputs.
 pub fn list_outputs() -> Result<Vec<OutputInfo>, TransferError> {
-    let host = cpal::host_from_id(HostId::PipeWire)?;
+    let host = crate::host()?;
     let mut outputs = Vec::new();
     for device in host.output_devices()? {
         outputs.push(OutputInfo {
@@ -60,7 +62,7 @@ pub struct TransferOptions {
 /// Transfer phase.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Phase {
-    /// Checking the graph; only silence is played.
+    /// Checking the audio path; only silence is played.
     Checking,
     /// Playing the stream data.
     Sending,
@@ -124,7 +126,7 @@ impl From<GraphError> for TransferError {
 /// [`Transfer`] handle.
 #[derive(Default)]
 struct Shared {
-    /// Set once the graph is verified: the callback starts sending data.
+    /// Set once the audio path is verified: the callback starts sending data.
     release: AtomicBool,
     cancel: AtomicBool,
     /// Data frames handed to the device so far.
@@ -224,7 +226,7 @@ fn run(
 ) -> Result<Report, TransferError> {
     set_phase(shared, Phase::Checking);
 
-    let host = cpal::host_from_id(HostId::PipeWire)?;
+    let host = crate::host()?;
     let device = match &options.device {
         Some(id) => host
             .device_by_id(&id.parse::<DeviceId>()?)
@@ -267,16 +269,11 @@ fn run(
     )?;
     stream.play()?;
 
-    // Pre-roll: only silence is played until the graph checks out.
-    let group = format!("cpal-{}", std::process::id());
-    let is_ours = |node: &graph::NodeState| {
-        node.prop("node.group") == Some(group.as_str())
-            && node.prop("media.class") == Some("Stream/Output/Audio")
-    };
+    // Pre-roll: only silence is played until the audio path checks out.
     let deadline = Instant::now() + VERIFY_TIMEOUT;
     let warnings = loop {
         take_stream_error(shared)?;
-        match check::verify(&graph::snapshot()?, is_ours) {
+        match verify(&device)? {
             Ok(warnings) => break warnings,
             Err(problem) if problem.is_transient() && Instant::now() < deadline => {
                 thread::sleep(VERIFY_INTERVAL);
@@ -296,17 +293,38 @@ fn run(
         thread::sleep(POLL_INTERVAL);
     }
 
-    // The rate must not have changed while the data was playing.
+    // The rate must not have changed while the data was playing. Checked
+    // before the stream is closed: its PipeWire node goes away with it.
     set_phase(shared, Phase::Draining);
-    let snapshot = graph::snapshot()?;
+    let after = verify(&device)?;
     let delay = Duration::from_nanos(shared.delay_ns.load(Ordering::Relaxed)).min(MAX_DELAY);
     thread::sleep(delay + TAIL_MARGIN);
     drop(stream);
     take_stream_error(shared)?;
-    check::verify(&snapshot, is_ours).map_err(TransferError::RateChanged)?;
+    after.map_err(TransferError::RateChanged)?;
 
     let cancelled = shared.cancel.load(Ordering::Relaxed);
     Ok(report(shared, warnings, cancelled))
+}
+
+/// Checks the PipeWire graph around our running stream.
+#[cfg(target_os = "linux")]
+fn verify(_device: &cpal::Device) -> Result<Result<Vec<Warning>, Problem>, TransferError> {
+    let group = format!("cpal-{}", std::process::id());
+    let is_ours = |node: &crate::graph::NodeState| {
+        node.prop("node.group") == Some(group.as_str())
+            && node.prop("media.class") == Some("Stream/Output/Audio")
+    };
+    Ok(check::verify(&crate::graph::snapshot()?, is_ours))
+}
+
+/// Checks the shared-mode mix format of the device: the stream is
+/// converted to it (WASAPI auto-conversion) without notice.
+#[cfg(not(target_os = "linux"))]
+fn verify(device: &cpal::Device) -> Result<Result<Vec<Warning>, Problem>, TransferError> {
+    let name = device.description()?.name().to_owned();
+    let rate = device.default_output_config()?.sample_rate();
+    Ok(check::verify_mix_rate(&name, rate))
 }
 
 fn report(shared: &Shared, warnings: Vec<Warning>, cancelled: bool) -> Report {

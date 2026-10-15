@@ -1,5 +1,6 @@
-//! Decisions on whether the audio path can carry a SYRO stream unchanged,
-//! based on a [`GraphSnapshot`]. Pure logic, no I/O.
+//! Decisions on whether the audio path can carry a SYRO stream unchanged:
+//! from a PipeWire [`GraphSnapshot`] on Linux, from the device mix format
+//! elsewhere. Pure logic, no I/O.
 
 use std::fmt;
 
@@ -28,6 +29,9 @@ pub enum Problem {
     StreamFormat { rate: u32, channels: u32 },
     /// The stream or device is muted.
     Muted { node: String },
+    /// The shared-mode mix format of the device (Windows) is not 44.1 kHz:
+    /// the system would resample the stream.
+    MixRate { device: String, rate: u32 },
 }
 
 impl Problem {
@@ -74,6 +78,12 @@ impl fmt::Display for Problem {
                  {STREAM_RATE} Hz stereo"
             ),
             Self::Muted { node } => write!(f, "{node} is muted"),
+            Self::MixRate { device, rate } => write!(
+                f,
+                "{device} runs at {rate} Hz, not {STREAM_RATE} Hz; the system would \
+                 resample the stream. In Sound settings open the device, then set \
+                 Format (Advanced) to 16 bit, {STREAM_RATE} Hz"
+            ),
         }
     }
 }
@@ -101,7 +111,7 @@ impl fmt::Display for Warning {
         match self {
             Self::Resampled { device, rate } => write!(
                 f,
-                "{device} supports only {rate} Hz, PipeWire resamples the stream from \
+                "{device} supports only {rate} Hz, the system resamples the stream from \
                  {STREAM_RATE} Hz (unavoidable on this device; a 44.1 kHz capable \
                  interface avoids it)"
             ),
@@ -116,6 +126,19 @@ impl fmt::Display for Warning {
                 percent(volumes)
             ),
         }
+    }
+}
+
+/// Checks a device whose stream goes through a shared mixer running at
+/// `mix_rate` (Windows): anything but 44.1 kHz would be resampled.
+pub fn verify_mix_rate(device: &str, mix_rate: u32) -> Result<Vec<Warning>, Problem> {
+    if mix_rate == STREAM_RATE {
+        Ok(Vec::new())
+    } else {
+        Err(Problem::MixRate {
+            device: device.to_owned(),
+            rate: mix_rate,
+        })
     }
 }
 
@@ -378,5 +401,17 @@ mod tests {
         let err = verify(&g, ours).unwrap_err();
         assert!(matches!(err, Problem::Muted { .. }));
         assert!(!err.is_transient());
+    }
+
+    #[test]
+    fn mix_rate() {
+        assert_eq!(verify_mix_rate("Speakers", 44_100), Ok(Vec::new()));
+        assert_eq!(
+            verify_mix_rate("Speakers", 48_000),
+            Err(Problem::MixRate {
+                device: "Speakers".into(),
+                rate: 48_000
+            })
+        );
     }
 }

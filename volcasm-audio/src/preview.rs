@@ -1,12 +1,11 @@
 //! Listening to a sample on the computer. Plain playback through the
-//! default PipeWire output; no graph verification, since resampling does not
-//! matter here.
+//! default output; no verification, since resampling does not matter here.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{BufferSize, HostId, OutputCallbackInfo, StreamConfig};
+use cpal::{BufferSize, OutputCallbackInfo, StreamConfig};
 
 use crate::output::TransferError;
 
@@ -32,7 +31,7 @@ impl Preview {
 
 /// Plays 16-bit mono `pcm` at `sample_rate` on the default output.
 pub fn preview(pcm: Arc<[i16]>, sample_rate: u32) -> Result<Preview, TransferError> {
-    let host = cpal::host_from_id(HostId::PipeWire)?;
+    let host = crate::host()?;
     let device = host
         .default_output_device()
         .ok_or_else(|| TransferError::DeviceNotFound("default".into()))?;

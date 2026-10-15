@@ -1,9 +1,9 @@
 //! Continuous stereo playback of a render function (sequence preview).
-//! Plain playback on the default output; resampling by PipeWire does not
-//! matter here.
+//! Plain playback on the default output; resampling by the audio system
+//! does not matter here.
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{HostId, OutputCallbackInfo, SampleFormat};
+use cpal::{OutputCallbackInfo, SampleFormat};
 
 use crate::output::TransferError;
 
@@ -22,14 +22,14 @@ impl Player {
         F: FnOnce(u32) -> R,
         R: FnMut(&mut [[f32; 2]]) + Send + 'static,
     {
-        let host = cpal::host_from_id(HostId::PipeWire)?;
+        let host = crate::host()?;
         let device = host
             .default_output_device()
             .ok_or_else(|| TransferError::DeviceNotFound("default".into()))?;
         let supported = device.default_output_config()?;
         let rate = supported.sample_rate();
         let mut config = supported.config();
-        // f32 is converted by PipeWire as needed.
+        // f32 is converted by the audio system as needed.
         config.channels = config.channels.max(1);
         let channels = usize::from(config.channels);
         let mut render = make(rate);

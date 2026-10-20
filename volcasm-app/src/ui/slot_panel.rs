@@ -10,6 +10,7 @@ use crate::state::AppState;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PanelAction {
     LoadFile(usize),
+    Export(usize),
     Clear(usize),
     ApplyTrim,
     Normalize,
@@ -189,6 +190,15 @@ pub fn show(
         }
         if ui.button(style::label("Replace")).clicked() {
             actions.push(PanelAction::LoadFile(n));
+        }
+        if ui
+            .button(style::icon_label(style::icon::EXPORT, "Export…"))
+            .on_hover_text(style::caps(
+                "save the sample as a WAV, as stored in the slot",
+            ))
+            .clicked()
+        {
+            actions.push(PanelAction::Export(n));
         }
     });
     // Same buttons, in the same order, as for sequences.

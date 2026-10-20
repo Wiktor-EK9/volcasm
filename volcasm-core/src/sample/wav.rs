@@ -1,6 +1,8 @@
 //! WAV files in the device format (16-bit mono PCM), as stored in projects.
 
-use std::io::{Read, Seek, Write};
+use std::fs::File;
+use std::io::{BufWriter, Read, Seek, Write};
+use std::path::Path;
 
 use super::Sample;
 
@@ -39,6 +41,11 @@ pub fn write(sample: &Sample, writer: impl Write + Seek) -> Result<(), hound::Er
     writer.finalize()
 }
 
+/// Saves `sample` to `path` as a 16-bit mono PCM WAV, exactly as stored.
+pub fn save(sample: &Sample, path: &Path) -> Result<(), hound::Error> {
+    write(sample, BufWriter::new(File::create(path)?))
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
@@ -55,5 +62,18 @@ mod tests {
         write(&sample, &mut buf).unwrap();
         buf.set_position(0);
         assert_eq!(read(buf).unwrap(), sample);
+    }
+
+    #[test]
+    fn save_writes_a_file() {
+        let sample = Sample {
+            sample_rate: 31_250,
+            pcm: vec![3, -3, 1000, -1000],
+        };
+        let path = std::env::temp_dir().join(format!("volcasm-save-{}.wav", std::process::id()));
+        save(&sample, &path).unwrap();
+        let read_back = read(File::open(&path).unwrap());
+        std::fs::remove_file(&path).unwrap();
+        assert_eq!(read_back.unwrap(), sample);
     }
 }

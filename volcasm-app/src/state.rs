@@ -551,9 +551,38 @@ pub fn name_from_path(path: &Path) -> String {
         .unwrap_or_else(|| "sample".into())
 }
 
+/// Default file name for exporting slot `slot` named `name`: the name
+/// without characters that are not allowed in file names on Linux or Windows.
+pub fn wav_file_name(slot: usize, name: &str) -> String {
+    let clean: String = name
+        .chars()
+        .map(|c| {
+            if c.is_control() || r#"<>:"/\|?*"#.contains(c) {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect();
+    let clean = clean.trim().trim_end_matches('.');
+    if clean.is_empty() {
+        format!("slot {slot}.wav")
+    } else {
+        format!("{clean}.wav")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wav_file_names_are_safe() {
+        assert_eq!(wav_file_name(3, "Kick 01"), "Kick 01.wav");
+        assert_eq!(wav_file_name(3, "a/b:c?"), "a_b_c_.wav");
+        assert_eq!(wav_file_name(7, "  "), "slot 7.wav");
+        assert_eq!(wav_file_name(7, "snare."), "snare.wav");
+    }
 
     fn sample(pcm: &[i16]) -> Sample {
         Sample {

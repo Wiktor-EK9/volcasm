@@ -7,12 +7,12 @@ use std::time::Duration;
 
 use eframe::egui::{self, ViewportCommand};
 use volcasm_audio::{OutputInfo, Phase, Preview, Recorder, Transfer, TransferOptions};
-use volcasm_core::sample::{Sample, import};
+use volcasm_core::sample::{Sample, import, wav};
 use volcasm_core::syro::{STREAM_SAMPLE_RATE, encode};
 
 use crate::preview::SequencePreview;
 use crate::settings::{self, Settings};
-use crate::state::{AppState, PartView, View, name_from_path};
+use crate::state::{AppState, PartView, View, name_from_path, wav_file_name};
 use crate::ui::menu::{self, MenuAction};
 use crate::ui::record_panel::{self, RecordAction};
 use crate::ui::sequences;
@@ -343,6 +343,32 @@ impl VolcasmApp {
             .pick_files()
         {
             self.load_samples(slot, paths);
+        }
+    }
+
+    /// Asks where to save the sample of `slot` and writes it as a WAV.
+    fn export_sample(&mut self, slot: usize) {
+        let Some(filled) = self.state.project.slot(slot) else {
+            return;
+        };
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter("WAV", &["wav"])
+            .set_file_name(wav_file_name(slot, &filled.name))
+            .save_file()
+        else {
+            return;
+        };
+        let has_wav = path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("wav"));
+        let path = if has_wav {
+            path
+        } else {
+            path.with_extension("wav")
+        };
+        match wav::save(&filled.sample, &path) {
+            Ok(()) => self.info(format!("{} {}", style::caps("Exported"), path.display())),
+            Err(err) => self.error(format!("{}: {err}", style::caps("Cannot export"))),
         }
     }
 
@@ -1203,6 +1229,7 @@ impl eframe::App for VolcasmApp {
                     for action in actions {
                         match action {
                             PanelAction::LoadFile(slot) => self.pick_sample(slot),
+                            PanelAction::Export(slot) => self.export_sample(slot),
                             PanelAction::Clear(slot) => {
                                 if self.preview.as_ref().is_some_and(|(n, _)| *n == slot) {
                                     self.preview = None;

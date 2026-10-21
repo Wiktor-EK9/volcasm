@@ -117,6 +117,8 @@ pub struct VolcasmApp {
     discard_focused: bool,
     settings: Settings,
     menu_open: bool,
+    /// The program icon, shown beside the logo text.
+    logo: egui::TextureHandle,
     screenshot: Option<Screenshot>,
     allow_close: bool,
     /// Window title last sent.
@@ -163,6 +165,7 @@ impl VolcasmApp {
             transfer_dialog: None,
             settings,
             menu_open: options.menu,
+            logo: logo_texture(&cc.egui_ctx),
             screenshot: options.screenshot.map(|path| Screenshot {
                 path,
                 frame: 0,
@@ -756,12 +759,14 @@ impl VolcasmApp {
         let mut wrapped = true;
         let in_mb = self.settings.memory_unit == settings::MemoryUnit::Mb;
         ui.horizontal(|ui| {
-            // The logo opens the menu.
+            // The logo (icon and name) opens the menu.
+            let group = ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 8.0;
+                ui.add(egui::Image::new(&self.logo).fit_to_exact_size(egui::vec2(32.0, 32.0)));
+                ui.label(style::brand("volcasm", 30.0).color(style::ACCENT));
+            });
             let logo = ui
-                .add(
-                    egui::Label::new(style::brand("volcasm", 30.0).color(style::ACCENT))
-                        .sense(egui::Sense::click()),
-                )
+                .interact(group.response.rect, ui.id().with("logo"), egui::Sense::click())
                 .on_hover_text(style::caps("menu"));
             if logo.hovered() {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
@@ -1072,6 +1077,21 @@ fn progress(phase: &'static str, fraction: f32, remaining_seconds: f64) -> Progr
         fraction,
         remaining_seconds,
     }
+}
+
+/// The bundled icon as a texture, mipmapped so it stays smooth when drawn
+/// small.
+fn logo_texture(ctx: &egui::Context) -> egui::TextureHandle {
+    let icon = crate::icon();
+    let image = egui::ColorImage::from_rgba_unmultiplied(
+        [icon.width as usize, icon.height as usize],
+        &icon.rgba,
+    );
+    let options = egui::TextureOptions {
+        mipmap_mode: Some(egui::TextureFilter::Linear),
+        ..egui::TextureOptions::LINEAR
+    };
+    ctx.load_texture("logo", image, options)
 }
 
 fn list_inputs() -> Result<Vec<OutputInfo>, String> {

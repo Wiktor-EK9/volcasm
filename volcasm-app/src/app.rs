@@ -766,7 +766,11 @@ impl VolcasmApp {
                 ui.label(style::brand("volcasm", 30.0).color(style::ACCENT));
             });
             let logo = ui
-                .interact(group.response.rect, ui.id().with("logo"), egui::Sense::click())
+                .interact(
+                    group.response.rect,
+                    ui.id().with("logo"),
+                    egui::Sense::click(),
+                )
                 .on_hover_text(style::caps("menu"));
             if logo.hovered() {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
@@ -869,7 +873,7 @@ impl VolcasmApp {
 
     fn menu(&mut self, ctx: &egui::Context) {
         let in_mb = self.settings.memory_unit == settings::MemoryUnit::Mb;
-        match menu::show(ctx, &mut self.menu_open, in_mb) {
+        match menu::show(ctx, &mut self.menu_open, in_mb, &self.logo) {
             Some(MenuAction::New) => self.discard_then(Discarding::New),
             Some(MenuAction::Open) => self.open_dialog(),
             Some(MenuAction::Save) => self.save(false),

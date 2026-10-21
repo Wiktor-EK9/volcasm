@@ -26,8 +26,14 @@ pub enum MenuAction {
 
 /// Shows the menu while `open` (or sliding out). Sets `open` to false when
 /// it should close; returns the chosen action.
-/// `memory_in_mb`: the current memory meter unit, for the toggle.
-pub fn show(ctx: &egui::Context, open: &mut bool, memory_in_mb: bool) -> Option<MenuAction> {
+/// `memory_in_mb`: the current memory meter unit, for the toggle; `logo`:
+/// the program icon, shown beside the name.
+pub fn show(
+    ctx: &egui::Context,
+    open: &mut bool,
+    memory_in_mb: bool,
+    logo: &egui::TextureHandle,
+) -> Option<MenuAction> {
     let t = ctx.animate_bool_with_time(Id::new("menu-anim"), *open, ANIMATION);
     if t <= 0.0 {
         return None;
@@ -67,7 +73,11 @@ pub fn show(ctx: &egui::Context, open: &mut bool, memory_in_mb: bool) -> Option<
                 .show(ui, |ui| {
                     egui::Frame::new().inner_margin(16.0).show(ui, |ui| {
                         ui.set_width(WIDTH - 32.0);
-                        ui.label(style::brand("volcasm", 30.0).color(style::ACCENT));
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 8.0;
+                            ui.add(egui::Image::new(logo).fit_to_exact_size(vec2(32.0, 32.0)));
+                            ui.label(style::brand("volcasm", 30.0).color(style::ACCENT));
+                        });
                         ui.add_space(16.0);
                         let item = |ui: &mut egui::Ui, icon: &str, text: &str| {
                             ui.add(

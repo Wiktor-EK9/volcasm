@@ -1,6 +1,6 @@
-# Test builds for Linux (AppImage) and Windows (zip), D23. Started by hand
-# (Actions -> build -> Run workflow) or by pushing a `v*` tag. The packages
-# are uploaded as workflow artifacts.
+# Test builds for Linux (AppImage), Windows (zip) and macOS (zipped .app),
+# D23. Started by hand (Actions -> build -> Run workflow) or by pushing a
+# `v*` tag. The packages are uploaded as workflow artifacts.
 name: build
 
 on:
@@ -59,4 +59,25 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: volcasm-windows-x64
+          path: dist/
+
+  macos:
+    # Apple Silicon runner; the x86_64 binary is cross-compiled and both are
+    # joined into one universal Volcasm.app. Tests run on arm64 only.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+      - run: cargo test --workspace
+      - run: cargo build --release -p volcasm-app --target aarch64-apple-darwin
+      - run: cargo build --release -p volcasm-app --target x86_64-apple-darwin
+      - name: Build app bundle
+        run: |
+          sh packaging/macos.sh
+          cp docs/testers.md dist/README.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: volcasm-macos-universal
           path: dist/

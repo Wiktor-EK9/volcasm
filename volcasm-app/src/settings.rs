@@ -25,13 +25,30 @@ pub enum MemoryUnit {
     Mb,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Settings {
     /// `None` until the user picks one: follow the system.
     #[serde(default)]
     pub theme: Option<Theme>,
     #[serde(default)]
     pub memory_unit: MemoryUnit,
+    /// Look for a new version at start (D25).
+    #[serde(default = "yes")]
+    pub check_updates: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            theme: None,
+            memory_unit: MemoryUnit::default(),
+            check_updates: true,
+        }
+    }
 }
 
 fn path() -> Option<PathBuf> {
@@ -141,15 +158,25 @@ mod tests {
         let s = Settings {
             theme: Some(Theme::Light),
             memory_unit: MemoryUnit::Mb,
+            check_updates: false,
         };
         let json = serde_json::to_string(&s).unwrap();
-        assert_eq!(json, r#"{"theme":"light","memory_unit":"mb"}"#);
+        assert_eq!(
+            json,
+            r#"{"theme":"light","memory_unit":"mb","check_updates":false}"#
+        );
         // Files written before the memory unit existed still load.
         assert_eq!(
             serde_json::from_str::<Settings>(r#"{"theme":"dark"}"#)
                 .unwrap()
                 .memory_unit,
             MemoryUnit::Blocks
+        );
+        // ... and check for updates, the default.
+        assert!(
+            serde_json::from_str::<Settings>(r#"{"theme":"dark"}"#)
+                .unwrap()
+                .check_updates
         );
         assert_eq!(serde_json::from_str::<Settings>(&json).unwrap(), s);
         assert_eq!(

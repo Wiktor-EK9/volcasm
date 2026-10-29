@@ -8,6 +8,7 @@ mod preview;
 mod settings;
 mod state;
 mod ui;
+mod update;
 
 use std::path::PathBuf;
 use std::process::ExitCode;

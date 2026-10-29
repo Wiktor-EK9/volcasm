@@ -1,6 +1,7 @@
 # Test builds for Linux (AppImage), Windows (zip) and macOS (zipped .app),
 # D23. Started by hand (Actions -> build -> Run workflow) or by pushing a
-# `v*` tag. The packages are uploaded as workflow artifacts.
+# `v*` tag. The packages are uploaded as workflow artifacts; a tag also
+# publishes them as a GitHub release, which the update check reads (D25).
 name: build
 
 on:
@@ -56,6 +57,9 @@ jobs:
           cp target/release/volcasm.exe "$dir/"
           cp docs/testers.md "$dir/README.md"
           packaging/licenses.sh "$dir/licenses"
+          # The zip is what a release ships and what the updater unpacks.
+          (cd dist && 7z a -tzip "volcasm-$version-windows-x64.zip" "volcasm-$version-windows-x64")
+          rm -r "$dir"
       - uses: actions/upload-artifact@v4
         with:
           name: volcasm-windows-x64
@@ -81,3 +85,37 @@ jobs:
         with:
           name: volcasm-macos-universal
           path: dist/
+
+  release:
+    # A tag `vX.Y.Z` publishes the packages and their SHA-256 sums. A tag
+    # with a suffix (`v0.2.0-rc1`) makes a pre-release, which the update
+    # check does not see.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, windows, macos]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$GITHUB_REF_NAME
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
+          flags=""
+          case "$tag" in
+            *-*) flags="--prerelease" ;;
+            "v$version") ;;
+            *) echo "tag $tag does not match version $version in Cargo.toml"; exit 1 ;;
+          esac
+          cd artifacts
+          files=$(ls *.AppImage *.zip)
+          sha256sum $files > SHA256SUMS
+          cat SHA256SUMS
+          gh release create "$tag" --repo "$GITHUB_REPOSITORY" --title "volcasm ${tag#v}" \
+            --generate-notes $flags $files SHA256SUMS

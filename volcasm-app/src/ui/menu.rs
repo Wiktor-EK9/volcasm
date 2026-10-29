@@ -4,6 +4,7 @@
 use eframe::egui::{self, Color32, Id, Order, Pos2, Rect, Sense, vec2};
 
 use super::style;
+use crate::update::UpdateState;
 
 /// Width of the menu, about the side bar's.
 const WIDTH: f32 = 380.0;
@@ -24,8 +25,20 @@ pub enum MenuAction {
     MemoryInMb(bool),
     /// Open the credits window.
     Credits,
+    /// Check for updates at start (`true`) or only on request.
+    CheckUpdatesAtStart(bool),
+    CheckForUpdate,
+    /// Get the version found by the check.
+    GetUpdate,
     /// Close the program (asks first about unsaved changes).
     Quit,
+}
+
+/// What the menu shows about updates.
+pub struct UpdateView<'a> {
+    /// Checked automatically at start.
+    pub at_start: bool,
+    pub state: &'a UpdateState,
 }
 
 /// Shows the menu while `open` (or sliding out). Sets `open` to false when
@@ -36,6 +49,7 @@ pub fn show(
     ctx: &egui::Context,
     open: &mut bool,
     memory_in_mb: bool,
+    updates: UpdateView<'_>,
     logo: &egui::TextureHandle,
 ) -> Option<MenuAction> {
     let t = ctx.animate_bool_with_time(Id::new("menu-anim"), *open, ANIMATION);
@@ -136,6 +150,9 @@ pub fn show(
                                 }
                             }
                         });
+                        if let Some(chosen) = updates_section(ui, &updates) {
+                            action = Some(chosen);
+                        }
                         // About and Quit sit at the bottom of the menu: the
                         // gap above them fills the window. Their height is
                         // the one measured in the previous frame.
@@ -164,6 +181,87 @@ pub fn show(
     }
     if action.is_some() {
         *open = false;
+    }
+    action
+}
+
+/// The auto-check toggle and one button whose text and action follow the
+/// update state: check, get the new version, or (dimmed) up to date.
+fn updates_section(ui: &mut egui::Ui, view: &UpdateView<'_>) -> Option<MenuAction> {
+    let mut action = None;
+    ui.add_space(8.0);
+    ui.label(style::label("Check for updates at start"));
+    ui.horizontal(|ui| {
+        for (name, value) in [("on", true), ("off", false)] {
+            let text = egui::RichText::new(style::caps(name)).size(16.0);
+            if ui.selectable_label(view.at_start == value, text).clicked() && view.at_start != value
+            {
+                action = Some(MenuAction::CheckUpdatesAtStart(value));
+            }
+        }
+    });
+    ui.add_space(8.0);
+    let (icon, text, enabled, chosen) = match view.state {
+        UpdateState::Checking => ("", "checking…".to_owned(), false, None),
+        UpdateState::Available(release) => (
+            style::icon::DOWNLOAD_SIMPLE,
+            format!("download version {}", release.version()),
+            true,
+            Some(MenuAction::GetUpdate),
+        ),
+        UpdateState::UpToDate => (
+            style::icon::CHECK_CIRCLE,
+            "latest version installed".to_owned(),
+            false,
+            None,
+        ),
+        UpdateState::Idle | UpdateState::Failed(_) => (
+            style::icon::ARROWS_CLOCKWISE,
+            "check for updates".to_owned(),
+            true,
+            Some(MenuAction::CheckForUpdate),
+        ),
+    };
+    let checking = *view.state == UpdateState::Checking;
+    let size = 18.0;
+    // While checking, a spinner stands in for the icon: spaces as wide as
+    // an icon keep the text where it would be.
+    let label = if checking {
+        let font = egui::FontId::proportional(size);
+        let width = |text: &str| {
+            ui.painter()
+                .layout_no_wrap(text.to_owned(), font.clone(), Color32::WHITE)
+                .size()
+                .x
+        };
+        let spaces = (width(style::icon::ARROWS_CLOCKWISE) / width(" ")).ceil() as usize;
+        egui::RichText::new(format!("{} {}", " ".repeat(spaces), style::caps(&text)))
+    } else {
+        style::icon_label(icon, &text)
+    };
+    let response = ui.add_enabled(
+        enabled,
+        egui::Button::new(label.size(size)).min_size(vec2(ui.available_width(), 36.0)),
+    );
+    if checking {
+        let padding = ui.spacing().button_padding.x;
+        let center = Pos2::new(
+            response.rect.left() + padding + size / 2.0,
+            response.rect.center().y,
+        );
+        egui::Spinner::new()
+            .size(size)
+            .paint_at(ui, Rect::from_center_size(center, vec2(size, size)));
+    }
+    if response.clicked() {
+        action = chosen;
+    }
+    if let UpdateState::Failed(reason) = view.state {
+        ui.label(
+            style::label(&format!("Last check: {reason}"))
+                .small()
+                .color(style::text_dim()),
+        );
     }
     action
 }

@@ -13,7 +13,7 @@ use volcasm_core::syro::{STREAM_SAMPLE_RATE, encode};
 use crate::preview::SequencePreview;
 use crate::settings::{self, Settings};
 use crate::state::{AppState, PartView, View, name_from_path, wav_file_name};
-use crate::ui::menu::{self, MenuAction};
+use crate::ui::menu::{self, MenuAction, UpdateView};
 use crate::ui::record_panel::{self, RecordAction};
 use crate::ui::sequences;
 use crate::ui::slot_panel::{self, NameEdit, PanelAction};
@@ -21,6 +21,7 @@ use crate::ui::slots::{self, SlotAction};
 use crate::ui::style;
 use crate::ui::transfer_dialog::{self, DialogAction};
 use crate::ui::transfer_panel::{self, Progress, TransferAction};
+use crate::update::{self, Release, UpdateState};
 use volcasm_core::project::Target;
 
 /// Level below which recorded sound counts as silence: -40 dBFS.
@@ -120,6 +121,8 @@ pub struct VolcasmApp {
     settings: Settings,
     menu_open: bool,
     credits_open: bool,
+    update: UpdateState,
+    update_check: Option<Receiver<Result<Release, String>>>,
     /// The program icon, shown beside the logo text.
     logo: egui::TextureHandle,
     screenshot: Option<Screenshot>,
@@ -169,6 +172,8 @@ impl VolcasmApp {
             settings,
             menu_open: options.menu,
             credits_open: options.credits,
+            update: UpdateState::Idle,
+            update_check: None,
             logo: logo_texture(&cc.egui_ctx),
             screenshot: options.screenshot.map(|path| Screenshot {
                 path,
@@ -195,6 +200,9 @@ impl VolcasmApp {
                 app.state.toggle_part_view(part, view);
             }
             app.state.scroll_to_part.get_or_insert(part);
+        }
+        if app.settings.check_updates {
+            app.check_for_update(&cc.egui_ctx);
         }
         app
     }
@@ -875,9 +883,32 @@ impl VolcasmApp {
         }
     }
 
+    fn check_for_update(&mut self, ctx: &egui::Context) {
+        self.update = UpdateState::Checking;
+        self.update_check = Some(update::check(ctx));
+    }
+
+    fn poll_update_check(&mut self) {
+        let Some(result) = self.update_check.as_ref().and_then(|rx| rx.try_recv().ok()) else {
+            return;
+        };
+        self.update_check = None;
+        self.update = match result {
+            Ok(release) if update::is_newer(update::CURRENT, release.version()) => {
+                UpdateState::Available(release)
+            }
+            Ok(_) => UpdateState::UpToDate,
+            Err(reason) => UpdateState::Failed(reason),
+        };
+    }
+
     fn menu(&mut self, ctx: &egui::Context) {
         let in_mb = self.settings.memory_unit == settings::MemoryUnit::Mb;
-        match menu::show(ctx, &mut self.menu_open, in_mb, &self.logo) {
+        let updates = UpdateView {
+            at_start: self.settings.check_updates,
+            state: &self.update,
+        };
+        match menu::show(ctx, &mut self.menu_open, in_mb, updates, &self.logo) {
             Some(MenuAction::New) => self.discard_then(Discarding::New),
             Some(MenuAction::Open) => self.open_dialog(),
             Some(MenuAction::Save) => self.save(false),
@@ -885,6 +916,21 @@ impl VolcasmApp {
             // Same path as closing the window: asks about unsaved changes.
             Some(MenuAction::Quit) => ctx.send_viewport_cmd(ViewportCommand::Close),
             Some(MenuAction::Credits) => self.credits_open = true,
+            Some(MenuAction::CheckUpdatesAtStart(on)) => {
+                self.settings.check_updates = on;
+                if let Err(err) = self.settings.save() {
+                    self.error(format!("{}: {err}", style::caps("Cannot save settings")));
+                }
+                if on && matches!(self.update, UpdateState::Idle | UpdateState::Failed(_)) {
+                    self.check_for_update(ctx);
+                }
+            }
+            Some(MenuAction::CheckForUpdate) => self.check_for_update(ctx),
+            Some(MenuAction::GetUpdate) => {
+                if let UpdateState::Available(release) = &self.update {
+                    ctx.open_url(egui::OpenUrl::new_tab(&release.page));
+                }
+            }
             Some(MenuAction::Theme(light)) => {
                 style::set_light(ctx, light);
                 self.settings.theme = Some(if light {
@@ -910,16 +956,34 @@ impl VolcasmApp {
         }
     }
 
-    fn status_bar(&self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| match self.messages.last() {
-            Some((true, text)) => {
-                ui.colored_label(style::ACCENT, text);
+    fn status_bar(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            match self.messages.last() {
+                Some((true, text)) => {
+                    ui.colored_label(style::ACCENT, text);
+                }
+                Some((false, text)) => {
+                    ui.label(egui::RichText::new(text).color(style::text_dim()));
+                }
+                None => {
+                    ui.label(egui::RichText::new(style::caps("ready")).color(style::text_dim()));
+                }
             }
-            Some((false, text)) => {
-                ui.label(egui::RichText::new(text).color(style::text_dim()));
-            }
-            None => {
-                ui.label(egui::RichText::new(style::caps("ready")).color(style::text_dim()));
+            // A new version: only this note, the menu has the button.
+            if matches!(self.update, UpdateState::Available(_)) {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let note = egui::Label::new(
+                        egui::RichText::new(style::caps("update available")).color(style::ACCENT),
+                    )
+                    .sense(egui::Sense::click());
+                    if ui
+                        .add(note)
+                        .on_hover_cursor(egui::CursorIcon::PointingHand)
+                        .clicked()
+                    {
+                        self.menu_open = true;
+                    }
+                });
             }
         });
     }
@@ -1186,6 +1250,7 @@ impl eframe::App for VolcasmApp {
             style::sync_theme(&ctx);
         }
         self.poll_imports();
+        self.poll_update_check();
         self.handle_dropped_files(&ctx);
         self.handle_close(&ctx);
         self.handle_shortcuts(&ctx);

@@ -25,6 +25,23 @@ If it does not start, install `libfuse2` (or `fuse2`), or run it with
 2. Run `volcasm.exe`. The build is not signed, so SmartScreen may warn about
    an unknown publisher: click "More info" → "Run anyway".
 
+### macOS (11 or newer, Intel or Apple Silicon)
+
+1. Unpack the zip and move `Volcasm.app` to Applications.
+2. The build is not signed by Apple, so the first start is blocked: right-click
+   the app → Open → Open. If macOS still refuses, run
+   `xattr -dr com.apple.quarantine /Applications/Volcasm.app` in Terminal.
+
+Transfers on macOS have not been tested yet.
+
+## Updates
+
+At start Volcasm asks GitHub once whether a newer version exists. If there is
+one, "UPDATE AVAILABLE" appears in red in the bottom right corner, and the
+menu (click the logo) has a button to download it. To stop the check, set
+"Check for updates at start" to OFF in the menu; the same button then checks
+on request. Nothing else is sent: only the request and the program version.
+
 ## Connecting the volca
 
 Connect the computer's headphone output to SYNC IN on the volca with a
@@ -61,5 +78,5 @@ volume, so please check points 2 and 3 yourself.
 
 ## Settings and files
 
-Settings are kept in `~/.config/volcasm/` (Linux) and `%APPDATA%\volcasm\`
-(Windows). Projects are single `.volcasm` files.
+Settings are kept in `~/.config/volcasm/` (Linux and macOS) and
+`%APPDATA%\volcasm\` (Windows). Projects are single `.volcasm` files.

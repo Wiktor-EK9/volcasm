@@ -48,6 +48,8 @@ pub struct Options {
     pub theme: Option<bool>,
     /// Start with the menu open.
     pub menu: bool,
+    /// Start with the credits window open.
+    pub credits: bool,
 }
 
 /// An action that discards unsaved changes, waiting for confirmation.
@@ -117,6 +119,7 @@ pub struct VolcasmApp {
     discard_focused: bool,
     settings: Settings,
     menu_open: bool,
+    credits_open: bool,
     /// The program icon, shown beside the logo text.
     logo: egui::TextureHandle,
     screenshot: Option<Screenshot>,
@@ -165,6 +168,7 @@ impl VolcasmApp {
             transfer_dialog: None,
             settings,
             menu_open: options.menu,
+            credits_open: options.credits,
             logo: logo_texture(&cc.egui_ctx),
             screenshot: options.screenshot.map(|path| Screenshot {
                 path,
@@ -880,6 +884,7 @@ impl VolcasmApp {
             Some(MenuAction::SaveAs) => self.save(true),
             // Same path as closing the window: asks about unsaved changes.
             Some(MenuAction::Quit) => ctx.send_viewport_cmd(ViewportCommand::Close),
+            Some(MenuAction::Credits) => self.credits_open = true,
             Some(MenuAction::Theme(light)) => {
                 style::set_light(ctx, light);
                 self.settings.theme = Some(if light {
@@ -1005,7 +1010,11 @@ impl VolcasmApp {
             }
             return;
         }
-        if self.discarding.is_some() || self.menu_open || ctx.text_edit_focused() {
+        if self.discarding.is_some()
+            || self.menu_open
+            || self.credits_open
+            || ctx.text_edit_focused()
+        {
             return;
         }
         // Consumed here, so a focused button is not clicked by it as well.
@@ -1368,6 +1377,9 @@ impl eframe::App for VolcasmApp {
         }
         self.transfer_dialog(&ctx, progress_for_dialog.as_ref());
         self.menu(&ctx);
+        if self.credits_open {
+            menu::credits_dialog(&ctx, &mut self.credits_open);
+        }
         self.confirm_discard(&ctx);
         self.screenshot_step(&ctx);
     }

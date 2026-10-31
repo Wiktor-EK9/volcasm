@@ -38,9 +38,12 @@ Transfers on macOS have not been tested yet.
 
 At start Volcasm asks GitHub once whether a newer version exists. If there is
 one, "UPDATE AVAILABLE" appears in red in the bottom right corner, and the
-menu (click the logo) has a button to download it. To stop the check, set
-"Check for updates at start" to OFF in the menu; the same button then checks
-on request. Nothing else is sent: only the request and the program version.
+menu (click the logo) has a button to download it. On Linux (AppImage) and
+Windows the new version replaces the program file; then "Restart to update"
+starts it. This needs write access to the folder with the program. On macOS
+the button opens the download page. To stop the check, set "Check for
+updates at start" to OFF in the menu; the same button then checks on
+request. Nothing else is sent: only the request and the program version.
 
 ## Connecting the volca
 

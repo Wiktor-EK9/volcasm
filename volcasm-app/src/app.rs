@@ -21,7 +21,7 @@ use crate::ui::slots::{self, SlotAction};
 use crate::ui::style;
 use crate::ui::transfer_dialog::{self, DialogAction};
 use crate::ui::transfer_panel::{self, Progress, TransferAction};
-use crate::update::{self, Release, UpdateState};
+use crate::update::{self, DownloadEvent, Release, UpdateState};
 use volcasm_core::project::Target;
 
 /// Level below which recorded sound counts as silence: -40 dBFS.
@@ -123,6 +123,10 @@ pub struct VolcasmApp {
     credits_open: bool,
     update: UpdateState,
     update_check: Option<Receiver<Result<Release, String>>>,
+    /// The release being downloaded, and the news from the download.
+    update_download: Option<(Release, Receiver<DownloadEvent>)>,
+    /// Start this program (the installed update) once the window closes.
+    restart: Option<PathBuf>,
     /// The program icon, shown beside the logo text.
     logo: egui::TextureHandle,
     screenshot: Option<Screenshot>,
@@ -174,6 +178,8 @@ impl VolcasmApp {
             credits_open: options.credits,
             update: UpdateState::Idle,
             update_check: None,
+            update_download: None,
+            restart: None,
             logo: logo_texture(&cc.egui_ctx),
             screenshot: options.screenshot.map(|path| Screenshot {
                 path,
@@ -902,6 +908,28 @@ impl VolcasmApp {
         };
     }
 
+    fn poll_update_download(&mut self) {
+        let Some((release, rx)) = &self.update_download else {
+            return;
+        };
+        let mut done = None;
+        for event in rx.try_iter() {
+            match event {
+                DownloadEvent::Progress(fraction) => {
+                    self.update = UpdateState::Downloading(fraction)
+                }
+                DownloadEvent::Done(result) => done = Some(result),
+            }
+        }
+        if let Some(result) = done {
+            self.update = match result {
+                Ok(path) => UpdateState::Installed(path),
+                Err(reason) => UpdateState::InstallFailed(release.clone(), reason),
+            };
+            self.update_download = None;
+        }
+    }
+
     fn menu(&mut self, ctx: &egui::Context) {
         let in_mb = self.settings.memory_unit == settings::MemoryUnit::Mb;
         let updates = UpdateView {
@@ -928,7 +956,27 @@ impl VolcasmApp {
             Some(MenuAction::CheckForUpdate) => self.check_for_update(ctx),
             Some(MenuAction::GetUpdate) => {
                 if let UpdateState::Available(release) = &self.update {
+                    match update::install_target() {
+                        Some(target) => {
+                            let rx = update::download(ctx, release, target);
+                            self.update_download = Some((release.clone(), rx));
+                            self.update = UpdateState::Downloading(0.0);
+                        }
+                        // macOS, or not run from an AppImage.
+                        None => ctx.open_url(egui::OpenUrl::new_tab(&release.page)),
+                    }
+                }
+            }
+            Some(MenuAction::OpenReleasePage) => {
+                if let UpdateState::InstallFailed(release, _) = &self.update {
                     ctx.open_url(egui::OpenUrl::new_tab(&release.page));
+                }
+            }
+            Some(MenuAction::RestartToUpdate) => {
+                if let UpdateState::Installed(path) = &self.update {
+                    self.restart = Some(path.clone());
+                    // Same path as Quit: asks about unsaved changes first.
+                    ctx.send_viewport_cmd(ViewportCommand::Close);
                 }
             }
             Some(MenuAction::Theme(light)) => {
@@ -970,7 +1018,13 @@ impl VolcasmApp {
                 }
             }
             // A new version: only this note, the menu has the button.
-            if matches!(self.update, UpdateState::Available(_)) {
+            if matches!(
+                self.update,
+                UpdateState::Available(_)
+                    | UpdateState::Downloading(_)
+                    | UpdateState::Installed(_)
+                    | UpdateState::InstallFailed(..)
+            ) {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let note = egui::Label::new(
                         egui::RichText::new(style::caps("update available")).color(style::ACCENT),
@@ -1053,7 +1107,13 @@ impl VolcasmApp {
                     ctx.send_viewport_cmd(ViewportCommand::Close);
                 }
             }
-            Some(false) => self.discarding = None,
+            Some(false) => {
+                if matches!(action, Discarding::Quit) {
+                    // Not closing, so not restarting either.
+                    self.restart = None;
+                }
+                self.discarding = None;
+            }
             None => {}
         }
     }
@@ -1107,12 +1167,22 @@ impl VolcasmApp {
     }
 
     fn handle_close(&mut self, ctx: &egui::Context) {
-        if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close {
+        if !ctx.input(|i| i.viewport().close_requested()) {
+            return;
+        }
+        if !self.allow_close {
             let busy = matches!(self.transfer, Some(TransferJob::Running { .. }));
             if self.state.dirty || busy {
                 ctx.send_viewport_cmd(ViewportCommand::CancelClose);
                 self.discarding = Some(Discarding::Quit);
+                return;
             }
+        }
+        // The window closes now: start the updated program.
+        if let Some(path) = self.restart.take()
+            && let Err(err) = std::process::Command::new(&path).spawn()
+        {
+            eprintln!("cannot start {}: {err}", path.display());
         }
     }
 
@@ -1251,6 +1321,7 @@ impl eframe::App for VolcasmApp {
         }
         self.poll_imports();
         self.poll_update_check();
+        self.poll_update_download();
         self.handle_dropped_files(&ctx);
         self.handle_close(&ctx);
         self.handle_shortcuts(&ctx);

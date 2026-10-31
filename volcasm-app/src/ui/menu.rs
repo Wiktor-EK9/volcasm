@@ -30,6 +30,9 @@ pub enum MenuAction {
     CheckForUpdate,
     /// Get the version found by the check.
     GetUpdate,
+    /// Close and start the installed new version.
+    RestartToUpdate,
+    OpenReleasePage,
     /// Close the program (asks first about unsaved changes).
     Quit,
 }
@@ -201,13 +204,35 @@ fn updates_section(ui: &mut egui::Ui, view: &UpdateView<'_>) -> Option<MenuActio
         }
     });
     ui.add_space(8.0);
+    // Show a spinner in place of the icon.
+    let mut busy = false;
     let (icon, text, enabled, chosen) = match view.state {
-        UpdateState::Checking => ("", "checking…".to_owned(), false, None),
+        UpdateState::Checking => {
+            busy = true;
+            ("", "checking…".to_owned(), false, None)
+        }
+        UpdateState::Downloading(done) => {
+            busy = true;
+            let text = format!("downloading… {:.0}%", done * 100.0);
+            ("", text, false, None)
+        }
         UpdateState::Available(release) => (
             style::icon::DOWNLOAD_SIMPLE,
             format!("download version {}", release.version()),
             true,
             Some(MenuAction::GetUpdate),
+        ),
+        UpdateState::Installed(_) => (
+            style::icon::ARROW_COUNTER_CLOCKWISE,
+            "restart to update".to_owned(),
+            true,
+            Some(MenuAction::RestartToUpdate),
+        ),
+        UpdateState::InstallFailed(..) => (
+            style::icon::ARROW_SQUARE_OUT,
+            "open download page".to_owned(),
+            true,
+            Some(MenuAction::OpenReleasePage),
         ),
         UpdateState::UpToDate => (
             style::icon::CHECK_CIRCLE,
@@ -222,11 +247,9 @@ fn updates_section(ui: &mut egui::Ui, view: &UpdateView<'_>) -> Option<MenuActio
             Some(MenuAction::CheckForUpdate),
         ),
     };
-    let checking = *view.state == UpdateState::Checking;
     let size = 18.0;
-    // While checking, a spinner stands in for the icon: spaces as wide as
-    // an icon keep the text where it would be.
-    let label = if checking {
+    // Spaces as wide as an icon keep the text where it would be.
+    let label = if busy {
         let font = egui::FontId::proportional(size);
         let width = |text: &str| {
             ui.painter()
@@ -243,7 +266,7 @@ fn updates_section(ui: &mut egui::Ui, view: &UpdateView<'_>) -> Option<MenuActio
         enabled,
         egui::Button::new(label.size(size)).min_size(vec2(ui.available_width(), 36.0)),
     );
-    if checking {
+    if busy {
         let padding = ui.spacing().button_padding.x;
         let center = Pos2::new(
             response.rect.left() + padding + size / 2.0,
@@ -256,7 +279,7 @@ fn updates_section(ui: &mut egui::Ui, view: &UpdateView<'_>) -> Option<MenuActio
     if response.clicked() {
         action = chosen;
     }
-    if let UpdateState::Failed(reason) = view.state {
+    if let UpdateState::Failed(reason) | UpdateState::InstallFailed(_, reason) = view.state {
         ui.label(
             style::label(&format!("Last check: {reason}"))
                 .small()

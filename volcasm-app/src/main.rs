@@ -92,6 +92,7 @@ fn parse_args() -> Result<(Options, Option<egui::Vec2>), String> {
 }
 
 fn main() -> ExitCode {
+    update::remove_old_exe();
     let (options, size) = match parse_args() {
         Ok(parsed) => parsed,
         Err(err) => {

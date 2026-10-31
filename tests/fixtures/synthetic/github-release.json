@@ -1,0 +1,33 @@
+{
+  "url": "https://api.github.com/repos/Wiktor-EK9/volcasm/releases/1",
+  "html_url": "https://github.com/Wiktor-EK9/volcasm/releases/tag/v0.2.0",
+  "id": 1,
+  "tag_name": "v0.2.0",
+  "name": "volcasm 0.2.0",
+  "draft": false,
+  "prerelease": false,
+  "published_at": "2026-11-01T12:00:00Z",
+  "assets": [
+    {
+      "name": "SHA256SUMS",
+      "size": 280,
+      "browser_download_url": "https://github.com/Wiktor-EK9/volcasm/releases/download/v0.2.0/SHA256SUMS"
+    },
+    {
+      "name": "volcasm-0.2.0-x86_64.AppImage",
+      "size": 9000000,
+      "browser_download_url": "https://github.com/Wiktor-EK9/volcasm/releases/download/v0.2.0/volcasm-0.2.0-x86_64.AppImage"
+    },
+    {
+      "name": "volcasm-0.2.0-windows-x64.zip",
+      "size": 5000000,
+      "browser_download_url": "https://github.com/Wiktor-EK9/volcasm/releases/download/v0.2.0/volcasm-0.2.0-windows-x64.zip"
+    },
+    {
+      "name": "volcasm-0.2.0-macos-universal.zip",
+      "size": 12000000,
+      "browser_download_url": "https://github.com/Wiktor-EK9/volcasm/releases/download/v0.2.0/volcasm-0.2.0-macos-universal.zip"
+    }
+  ],
+  "body": "Release notes."
+}

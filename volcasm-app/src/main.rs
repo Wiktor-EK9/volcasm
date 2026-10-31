@@ -8,6 +8,7 @@ mod preview;
 mod settings;
 mod state;
 mod ui;
+mod update;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -18,7 +19,7 @@ use state::PartView;
 
 const USAGE: &str = "usage: volcasm [project.volcasm | project.vsj] [--select <slot>] \
                      [--sequences] [--pattern <1-10>] [--params <part>] [--motion <part>] \
-                     [--theme light|dark] [--menu] [--size <width>x<height>] \
+                     [--theme light|dark] [--menu] [--credits] [--size <width>x<height>] \
                      [--screenshot <out.png>]";
 
 /// Window icon (taskbar on Windows; on Wayland the desktop file gives it).
@@ -49,6 +50,7 @@ fn parse_args() -> Result<(Options, Option<egui::Vec2>), String> {
             "--screenshot" => options.screenshot = Some(PathBuf::from(value()?)),
             "--sequences" => options.sequences = true,
             "--menu" => options.menu = true,
+            "--credits" => options.credits = true,
             "--theme" => {
                 options.theme = Some(match value()?.as_str() {
                     "light" => true,
@@ -90,6 +92,7 @@ fn parse_args() -> Result<(Options, Option<egui::Vec2>), String> {
 }
 
 fn main() -> ExitCode {
+    update::remove_old_exe();
     let (options, size) = match parse_args() {
         Ok(parsed) => parsed,
         Err(err) => {

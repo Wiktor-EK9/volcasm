@@ -13,7 +13,7 @@ use volcasm_core::syro::{STREAM_SAMPLE_RATE, encode};
 use crate::preview::SequencePreview;
 use crate::settings::{self, Settings};
 use crate::state::{AppState, PartView, View, name_from_path, wav_file_name};
-use crate::ui::menu::{self, MenuAction};
+use crate::ui::menu::{self, MenuAction, UpdateView};
 use crate::ui::record_panel::{self, RecordAction};
 use crate::ui::sequences;
 use crate::ui::slot_panel::{self, NameEdit, PanelAction};
@@ -21,6 +21,7 @@ use crate::ui::slots::{self, SlotAction};
 use crate::ui::style;
 use crate::ui::transfer_dialog::{self, DialogAction};
 use crate::ui::transfer_panel::{self, Progress, TransferAction};
+use crate::update::{self, DownloadEvent, Release, UpdateState};
 use volcasm_core::project::Target;
 
 /// Level below which recorded sound counts as silence: -40 dBFS.
@@ -48,6 +49,8 @@ pub struct Options {
     pub theme: Option<bool>,
     /// Start with the menu open.
     pub menu: bool,
+    /// Start with the credits window open.
+    pub credits: bool,
 }
 
 /// An action that discards unsaved changes, waiting for confirmation.
@@ -117,6 +120,13 @@ pub struct VolcasmApp {
     discard_focused: bool,
     settings: Settings,
     menu_open: bool,
+    credits_open: bool,
+    update: UpdateState,
+    update_check: Option<Receiver<Result<Release, String>>>,
+    /// The release being downloaded, and the news from the download.
+    update_download: Option<(Release, Receiver<DownloadEvent>)>,
+    /// Start this program (the installed update) once the window closes.
+    restart: Option<PathBuf>,
     /// The program icon, shown beside the logo text.
     logo: egui::TextureHandle,
     screenshot: Option<Screenshot>,
@@ -165,6 +175,11 @@ impl VolcasmApp {
             transfer_dialog: None,
             settings,
             menu_open: options.menu,
+            credits_open: options.credits,
+            update: UpdateState::Idle,
+            update_check: None,
+            update_download: None,
+            restart: None,
             logo: logo_texture(&cc.egui_ctx),
             screenshot: options.screenshot.map(|path| Screenshot {
                 path,
@@ -191,6 +206,9 @@ impl VolcasmApp {
                 app.state.toggle_part_view(part, view);
             }
             app.state.scroll_to_part.get_or_insert(part);
+        }
+        if app.settings.check_updates {
+            app.check_for_update(&cc.egui_ctx);
         }
         app
     }
@@ -871,15 +889,96 @@ impl VolcasmApp {
         }
     }
 
+    fn check_for_update(&mut self, ctx: &egui::Context) {
+        self.update = UpdateState::Checking;
+        self.update_check = Some(update::check(ctx));
+    }
+
+    fn poll_update_check(&mut self) {
+        let Some(result) = self.update_check.as_ref().and_then(|rx| rx.try_recv().ok()) else {
+            return;
+        };
+        self.update_check = None;
+        self.update = match result {
+            Ok(release) if update::is_newer(update::CURRENT, release.version()) => {
+                UpdateState::Available(release)
+            }
+            Ok(_) => UpdateState::UpToDate,
+            Err(reason) => UpdateState::Failed(reason),
+        };
+    }
+
+    fn poll_update_download(&mut self) {
+        let Some((release, rx)) = &self.update_download else {
+            return;
+        };
+        let mut done = None;
+        for event in rx.try_iter() {
+            match event {
+                DownloadEvent::Progress(fraction) => {
+                    self.update = UpdateState::Downloading(fraction)
+                }
+                DownloadEvent::Done(result) => done = Some(result),
+            }
+        }
+        if let Some(result) = done {
+            self.update = match result {
+                Ok(path) => UpdateState::Installed(path),
+                Err(reason) => UpdateState::InstallFailed(release.clone(), reason),
+            };
+            self.update_download = None;
+        }
+    }
+
     fn menu(&mut self, ctx: &egui::Context) {
         let in_mb = self.settings.memory_unit == settings::MemoryUnit::Mb;
-        match menu::show(ctx, &mut self.menu_open, in_mb, &self.logo) {
+        let updates = UpdateView {
+            at_start: self.settings.check_updates,
+            state: &self.update,
+        };
+        match menu::show(ctx, &mut self.menu_open, in_mb, updates, &self.logo) {
             Some(MenuAction::New) => self.discard_then(Discarding::New),
             Some(MenuAction::Open) => self.open_dialog(),
             Some(MenuAction::Save) => self.save(false),
             Some(MenuAction::SaveAs) => self.save(true),
             // Same path as closing the window: asks about unsaved changes.
             Some(MenuAction::Quit) => ctx.send_viewport_cmd(ViewportCommand::Close),
+            Some(MenuAction::Credits) => self.credits_open = true,
+            Some(MenuAction::CheckUpdatesAtStart(on)) => {
+                self.settings.check_updates = on;
+                if let Err(err) = self.settings.save() {
+                    self.error(format!("{}: {err}", style::caps("Cannot save settings")));
+                }
+                if on && matches!(self.update, UpdateState::Idle | UpdateState::Failed(_)) {
+                    self.check_for_update(ctx);
+                }
+            }
+            Some(MenuAction::CheckForUpdate) => self.check_for_update(ctx),
+            Some(MenuAction::GetUpdate) => {
+                if let UpdateState::Available(release) = &self.update {
+                    match update::install_target() {
+                        Some(target) => {
+                            let rx = update::download(ctx, release, target);
+                            self.update_download = Some((release.clone(), rx));
+                            self.update = UpdateState::Downloading(0.0);
+                        }
+                        // macOS, or not run from an AppImage.
+                        None => ctx.open_url(egui::OpenUrl::new_tab(&release.page)),
+                    }
+                }
+            }
+            Some(MenuAction::OpenReleasePage) => {
+                if let UpdateState::InstallFailed(release, _) = &self.update {
+                    ctx.open_url(egui::OpenUrl::new_tab(&release.page));
+                }
+            }
+            Some(MenuAction::RestartToUpdate) => {
+                if let UpdateState::Installed(path) = &self.update {
+                    self.restart = Some(path.clone());
+                    // Same path as Quit: asks about unsaved changes first.
+                    ctx.send_viewport_cmd(ViewportCommand::Close);
+                }
+            }
             Some(MenuAction::Theme(light)) => {
                 style::set_light(ctx, light);
                 self.settings.theme = Some(if light {
@@ -905,16 +1004,40 @@ impl VolcasmApp {
         }
     }
 
-    fn status_bar(&self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| match self.messages.last() {
-            Some((true, text)) => {
-                ui.colored_label(style::ACCENT, text);
+    fn status_bar(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            match self.messages.last() {
+                Some((true, text)) => {
+                    ui.colored_label(style::ACCENT, text);
+                }
+                Some((false, text)) => {
+                    ui.label(egui::RichText::new(text).color(style::text_dim()));
+                }
+                None => {
+                    ui.label(egui::RichText::new(style::caps("ready")).color(style::text_dim()));
+                }
             }
-            Some((false, text)) => {
-                ui.label(egui::RichText::new(text).color(style::text_dim()));
-            }
-            None => {
-                ui.label(egui::RichText::new(style::caps("ready")).color(style::text_dim()));
+            // A new version: only this note, the menu has the button.
+            if matches!(
+                self.update,
+                UpdateState::Available(_)
+                    | UpdateState::Downloading(_)
+                    | UpdateState::Installed(_)
+                    | UpdateState::InstallFailed(..)
+            ) {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let note = egui::Label::new(
+                        egui::RichText::new(style::caps("update available")).color(style::ACCENT),
+                    )
+                    .sense(egui::Sense::click());
+                    if ui
+                        .add(note)
+                        .on_hover_cursor(egui::CursorIcon::PointingHand)
+                        .clicked()
+                    {
+                        self.menu_open = true;
+                    }
+                });
             }
         });
     }
@@ -984,7 +1107,13 @@ impl VolcasmApp {
                     ctx.send_viewport_cmd(ViewportCommand::Close);
                 }
             }
-            Some(false) => self.discarding = None,
+            Some(false) => {
+                if matches!(action, Discarding::Quit) {
+                    // Not closing, so not restarting either.
+                    self.restart = None;
+                }
+                self.discarding = None;
+            }
             None => {}
         }
     }
@@ -1005,7 +1134,11 @@ impl VolcasmApp {
             }
             return;
         }
-        if self.discarding.is_some() || self.menu_open || ctx.text_edit_focused() {
+        if self.discarding.is_some()
+            || self.menu_open
+            || self.credits_open
+            || ctx.text_edit_focused()
+        {
             return;
         }
         // Consumed here, so a focused button is not clicked by it as well.
@@ -1034,12 +1167,22 @@ impl VolcasmApp {
     }
 
     fn handle_close(&mut self, ctx: &egui::Context) {
-        if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close {
+        if !ctx.input(|i| i.viewport().close_requested()) {
+            return;
+        }
+        if !self.allow_close {
             let busy = matches!(self.transfer, Some(TransferJob::Running { .. }));
             if self.state.dirty || busy {
                 ctx.send_viewport_cmd(ViewportCommand::CancelClose);
                 self.discarding = Some(Discarding::Quit);
+                return;
             }
+        }
+        // The window closes now: start the updated program.
+        if let Some(path) = self.restart.take()
+            && let Err(err) = std::process::Command::new(&path).spawn()
+        {
+            eprintln!("cannot start {}: {err}", path.display());
         }
     }
 
@@ -1177,6 +1320,8 @@ impl eframe::App for VolcasmApp {
             style::sync_theme(&ctx);
         }
         self.poll_imports();
+        self.poll_update_check();
+        self.poll_update_download();
         self.handle_dropped_files(&ctx);
         self.handle_close(&ctx);
         self.handle_shortcuts(&ctx);
@@ -1368,6 +1513,9 @@ impl eframe::App for VolcasmApp {
         }
         self.transfer_dialog(&ctx, progress_for_dialog.as_ref());
         self.menu(&ctx);
+        if self.credits_open {
+            menu::credits_dialog(&ctx, &mut self.credits_open);
+        }
         self.confirm_discard(&ctx);
         self.screenshot_step(&ctx);
     }

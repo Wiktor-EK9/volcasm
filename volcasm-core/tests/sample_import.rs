@@ -118,6 +118,45 @@ fn mp3_is_imported() {
 }
 
 #[test]
+fn m4a_aac_is_imported() {
+    assert_sine("sine_44100_mono.m4a", MONO_PEAK, LOSSY_LEVEL, LOSSY_FRAMES);
+}
+
+/// Whole songs often carry cover art in an ID3v2 tag larger than the 1 MB
+/// that symphonia scans for a format; without the ID3v2 reader such files
+/// failed with "no suitable format reader found".
+#[test]
+fn mp3_after_large_id3_tag_is_imported() {
+    const PAYLOAD: usize = 2 * 1024 * 1024;
+    let mut frame = b"volcasm\0".to_vec();
+    frame.resize(PAYLOAD, 0);
+    let mut tag = b"PRIV".to_vec();
+    tag.extend_from_slice(&(frame.len() as u32).to_be_bytes());
+    tag.extend_from_slice(&[0, 0]);
+    tag.extend_from_slice(&frame);
+    // ID3v2.3 header; the tag size is "synchsafe" (7 bits per byte).
+    let size = tag.len() as u32;
+    let mut file = b"ID3\x03\x00\x00".to_vec();
+    file.extend((0..4).rev().map(|i| ((size >> (7 * i)) & 0x7f) as u8));
+    file.extend_from_slice(&tag);
+    file.extend_from_slice(&std::fs::read(synthetic("sine_44100_mono.mp3")).unwrap());
+
+    let path = std::env::temp_dir().join(format!("volcasm-id3-{}.mp3", std::process::id()));
+    std::fs::write(&path, &file).unwrap();
+    let result = import::import_file(&path, RATE);
+    std::fs::remove_file(&path).unwrap();
+    let sample = result.unwrap();
+    assert!(
+        LOSSY_FRAMES.contains(&sample.frames()),
+        "{} frames",
+        sample.frames()
+    );
+    let (peak, frequency) = measure(&sample);
+    assert_close(peak, MONO_PEAK, LOSSY_LEVEL, "peak");
+    assert_close(frequency, FREQUENCY, 0.01, "frequency");
+}
+
+#[test]
 fn ogg_vorbis_is_imported() {
     assert_sine(
         "sine_44100_stereo.ogg",

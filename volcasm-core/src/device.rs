@@ -1,7 +1,20 @@
 //! Device profiles: hardware limits kept in one place, so the data model and
 //! file format do not hard-code them (D13).
 
+use std::fmt;
+
 use crate::memory::MemoryLayout;
+use volcasm_syro_sys as sys;
+
+/// An image of the whole sample memory, sent in one transfer.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct MemoryImage(pub &'static [u8]);
+
+impl fmt::Debug for MemoryImage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "MemoryImage({} B)", self.0.len())
+    }
+}
 
 /// Hardware limits of one supported device.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -18,6 +31,10 @@ pub struct DeviceProfile {
     pub sample_rate: u32,
     /// Sample memory layout.
     pub memory: MemoryLayout,
+    /// The factory samples (factory reset).
+    pub factory_samples: MemoryImage,
+    /// No samples at all (erase all slots).
+    pub no_samples: MemoryImage,
 }
 
 impl DeviceProfile {
@@ -44,6 +61,9 @@ pub const VOLCA_SAMPLE: DeviceProfile = DeviceProfile {
         block_size: 4096,
         blocks: 1019,
     },
+    // From KORG's SDK (`alldata`); the factory sequences are empty (D26).
+    factory_samples: MemoryImage(sys::ALLDATA_FACTORY),
+    no_samples: MemoryImage(sys::ALLDATA_EMPTY),
 };
 
 /// All supported device profiles.

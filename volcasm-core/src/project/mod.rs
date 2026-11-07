@@ -3,6 +3,7 @@
 pub mod file;
 
 use std::fmt;
+use std::sync::LazyLock;
 
 use crate::device::DeviceProfile;
 use crate::memory::MemoryUsage;
@@ -27,7 +28,26 @@ pub enum Target {
     Erase(usize),
     /// Pattern `n` (0-based; sequence n+1).
     Pattern(usize),
+    /// Replace all samples on the device with the factory ones.
+    FactorySamples,
+    /// Erase all samples on the device.
+    EraseAllSamples,
+    /// An empty pattern into sequence `n + 1`, whatever the project holds
+    /// (factory reset: the factory sequences are empty).
+    EmptyPattern(usize),
 }
+
+impl Target {
+    /// A factory reset: the factory samples and empty sequences.
+    pub fn factory_reset(device: &DeviceProfile) -> Vec<Target> {
+        std::iter::once(Target::FactorySamples)
+            .chain((0..device.patterns as usize).map(Target::EmptyPattern))
+            .collect()
+    }
+}
+
+/// What [`Target::EmptyPattern`] sends.
+static EMPTY_PATTERN: LazyLock<Pattern> = LazyLock::new(Pattern::default);
 
 /// Error when changing a project or preparing a transfer.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -220,22 +240,41 @@ impl Project {
                     }
                     Target::Pattern(n) => SyroItem::Pattern {
                         index: n as u32,
-                        data: self
-                            .pattern_raw(n)
-                            .ok_or(ProjectError::PatternOutOfRange(n))?,
+                        data: raw(self
+                            .patterns
+                            .get(n)
+                            .ok_or(ProjectError::PatternOutOfRange(n))?),
+                    },
+                    Target::EmptyPattern(n) => {
+                        if n >= self.patterns.len() {
+                            return Err(ProjectError::PatternOutOfRange(n));
+                        }
+                        SyroItem::Pattern {
+                            index: n as u32,
+                            data: raw(&EMPTY_PATTERN),
+                        }
+                    }
+                    // Compressed to 16 bits: lossless, and 13 instead of 21
+                    // minutes for the factory samples.
+                    Target::FactorySamples => SyroItem::AllCompressed {
+                        data: self.device.factory_samples.0,
+                        bits: 16,
+                    },
+                    Target::EraseAllSamples => SyroItem::AllCompressed {
+                        data: self.device.no_samples.0,
+                        bits: 16,
                     },
                 })
             })
             .collect()
     }
+}
 
-    /// Raw bytes of pattern `n`, as SYRO takes them.
-    fn pattern_raw(&self, n: usize) -> Option<&[u8; crate::syro::PATTERN_SIZE]> {
-        let pattern = self.patterns.get(n)?;
-        // SAFETY: `PatternData` is exactly PATTERN_SIZE bytes without padding
-        // (see `pattern`), and u8 has no alignment requirement.
-        Some(unsafe { &*std::ptr::from_ref(pattern.data()).cast() })
-    }
+/// Raw bytes of `pattern`, as SYRO takes them.
+fn raw(pattern: &Pattern) -> &[u8; crate::syro::PATTERN_SIZE] {
+    // SAFETY: `PatternData` is exactly PATTERN_SIZE bytes without padding
+    // (see `pattern`), and u8 has no alignment requirement.
+    unsafe { &*std::ptr::from_ref(pattern.data()).cast() }
 }
 
 #[cfg(test)]
@@ -326,6 +365,40 @@ mod tests {
         ));
         assert!(matches!(
             p.syro_items(&[Target::Pattern(10)], None),
+            Err(ProjectError::PatternOutOfRange(10))
+        ));
+    }
+
+    #[test]
+    fn factory_reset_sends_factory_samples_and_empty_sequences() {
+        let mut p = Project::new(&VOLCA_SAMPLE, "x");
+        p.pattern_mut(2).unwrap().set_active_steps(0x0001);
+        let targets = Target::factory_reset(&VOLCA_SAMPLE);
+        assert_eq!(targets.len(), 11);
+        let items = p.syro_items(&targets, Some(8)).unwrap();
+        match items[0] {
+            SyroItem::AllCompressed { data, bits } => {
+                assert_eq!(data.len(), 3_932_160);
+                assert_eq!(bits, 16);
+            }
+            _ => panic!(),
+        }
+        for (n, item) in items[1..].iter().enumerate() {
+            match item {
+                SyroItem::Pattern { index, data } => {
+                    assert_eq!(*index, n as u32);
+                    // Not the project's pattern 3, which has steps.
+                    assert_eq!(**data, Pattern::default().to_bytes());
+                }
+                _ => panic!(),
+            }
+        }
+        match p.syro_items(&[Target::EraseAllSamples], None).unwrap()[0] {
+            SyroItem::AllCompressed { data, bits: 16 } => assert_eq!(data.len(), 16_384),
+            _ => panic!(),
+        }
+        assert!(matches!(
+            p.syro_items(&[Target::EmptyPattern(10)], None),
             Err(ProjectError::PatternOutOfRange(10))
         ));
     }

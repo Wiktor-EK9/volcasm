@@ -29,11 +29,11 @@ pub enum DialogAction {
     RefreshOutputs,
 }
 
-/// Shows the dialog. `summary` lists what will be sent, `report` the
-/// messages of a finished transfer.
+/// Shows the dialog. `summary` lists what will be sent (`true`: a
+/// warning), `report` the messages of a finished transfer.
 pub fn show(
     ctx: &egui::Context,
-    summary: &[String],
+    summary: &[(bool, String)],
     stage: Stage<'_>,
     report: &[(bool, String)],
     outputs: &Result<Vec<OutputInfo>, String>,
@@ -164,7 +164,7 @@ fn diagram(ui: &mut Ui) {
 
 fn details(
     ui: &mut Ui,
-    summary: &[String],
+    summary: &[(bool, String)],
     stage: &Stage<'_>,
     report: &[(bool, String)],
     outputs: &Result<Vec<OutputInfo>, String>,
@@ -175,8 +175,12 @@ fn details(
     egui::ScrollArea::vertical()
         .max_height(170.0)
         .show(ui, |ui| {
-            for line in summary {
-                ui.label(line);
+            for (warning, line) in summary {
+                if *warning {
+                    ui.colored_label(style::ACCENT, line);
+                } else {
+                    ui.label(line);
+                }
             }
         });
     ui.add_space(8.0);

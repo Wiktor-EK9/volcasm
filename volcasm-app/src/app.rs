@@ -51,6 +51,8 @@ pub struct Options {
     pub menu: bool,
     /// Start with the credits window open.
     pub credits: bool,
+    /// Start with the factory reset transfer dialog open.
+    pub factory_reset: bool,
 }
 
 /// An action that discards unsaved changes, waiting for confirmation.
@@ -114,8 +116,9 @@ pub struct VolcasmApp {
     name_edit: NameEdit,
     /// Project name being edited in the top bar.
     name_draft: Option<String>,
-    /// Transfer dialog open, with the summary of what will be sent.
-    transfer_dialog: Option<Vec<String>>,
+    /// Transfer dialog open, with the summary of what will be sent;
+    /// `true` marks a warning.
+    transfer_dialog: Option<Vec<(bool, String)>>,
     /// In the unsaved-changes dialog, DISCARD is selected (else KEEP).
     discard_focused: bool,
     settings: Settings,
@@ -206,6 +209,9 @@ impl VolcasmApp {
                 app.state.toggle_part_view(part, view);
             }
             app.state.scroll_to_part.get_or_insert(part);
+        }
+        if options.factory_reset {
+            app.start_transfer(Target::factory_reset(app.state.project.device()));
         }
         if app.settings.check_updates {
             app.check_for_update(&cc.egui_ctx);
@@ -426,32 +432,63 @@ impl VolcasmApp {
     }
 
     /// What `targets` will send, for the transfer dialog.
-    fn transfer_summary(&self, targets: &[Target]) -> Vec<String> {
+    fn transfer_summary(&self, targets: &[Target]) -> Vec<(bool, String)> {
         let mut lines = Vec::new();
         let mut erased = Vec::new();
         let mut patterns = Vec::new();
+        let mut empty_patterns = Vec::new();
         for target in targets {
             match *target {
                 Target::Sample(n) => {
                     let name = self.state.project.slot(n).map_or("", |s| s.name.as_str());
-                    lines.push(format!("{} {n}: {name}", style::caps("slot")));
+                    lines.push((false, format!("{} {n}: {name}", style::caps("slot"))));
                 }
                 Target::Erase(n) => erased.push(n.to_string()),
                 Target::Pattern(n) => patterns.push((n + 1).to_string()),
+                Target::EmptyPattern(n) => empty_patterns.push((n + 1).to_string()),
+                Target::FactorySamples => {
+                    lines.push((false, style::caps("factory samples in all slots")));
+                    lines.push((
+                        true,
+                        style::caps(
+                            "Replaces every sample on the volca. They cannot be read back: \
+                             keep a project with the ones you need.",
+                        ),
+                    ));
+                }
+                Target::EraseAllSamples => lines.push((
+                    true,
+                    style::caps(
+                        "Erases every sample on the volca. They cannot be read back: \
+                         keep a project with the ones you need.",
+                    ),
+                )),
             }
         }
         if !erased.is_empty() {
-            lines.push(format!(
-                "{} {}",
-                style::caps("erase slots"),
-                erased.join(", ")
+            lines.push((
+                false,
+                format!("{} {}", style::caps("erase slots"), erased.join(", ")),
             ));
         }
         if !patterns.is_empty() {
-            lines.push(format!(
-                "{} {}",
-                style::caps("sequences"),
-                patterns.join(", ")
+            lines.push((
+                false,
+                format!("{} {}", style::caps("sequences"), patterns.join(", ")),
+            ));
+        }
+        if !empty_patterns.is_empty() {
+            lines.push((
+                false,
+                format!(
+                    "{} {}",
+                    style::caps("empty sequences"),
+                    empty_patterns.join(", ")
+                ),
+            ));
+            lines.push((
+                true,
+                style::caps("Replaces the sequences on the volca with empty ones."),
             ));
         }
         lines
@@ -944,6 +981,10 @@ impl VolcasmApp {
             // Same path as closing the window: asks about unsaved changes.
             Some(MenuAction::Quit) => ctx.send_viewport_cmd(ViewportCommand::Close),
             Some(MenuAction::Credits) => self.credits_open = true,
+            Some(MenuAction::FactoryReset) => {
+                self.start_transfer(Target::factory_reset(self.state.project.device()))
+            }
+            Some(MenuAction::EraseAllSamples) => self.start_transfer(vec![Target::EraseAllSamples]),
             Some(MenuAction::CheckUpdatesAtStart(on)) => {
                 self.settings.check_updates = on;
                 if let Err(err) = self.settings.save() {

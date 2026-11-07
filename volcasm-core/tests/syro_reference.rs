@@ -181,6 +181,22 @@ fn compressed_all_data_matches_sdk_example() {
     assert_same_wav(&ours, &reference);
 }
 
+/// Factory reset (the KORG preset image, 13 minutes of stream).
+#[test]
+fn compressed_factory_samples_match_sdk_example() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../volcasm-syro-sys/vendor/volcasample/alldata/all_sample_preset.alldata");
+    let data = std::fs::read(&path).unwrap();
+    assert_eq!(data, volcasm_syro_sys::ALLDATA_FACTORY);
+    let item = SyroItem::AllCompressed {
+        data: &data,
+        bits: 16,
+    };
+    let ours = stream_to_wav(&encode(&[item]).unwrap());
+    let reference = reference_wav("all_preset_c16", &[arg("ac16", &path)]);
+    assert_same_wav(&ours, &reference);
+}
+
 #[test]
 fn out_of_range_slot_is_rejected() {
     let err = encode(&[SyroItem::Erase { slot: 100 }]).unwrap_err();

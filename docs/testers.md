@@ -79,6 +79,15 @@ and, after the transfer, `pw-metadata -n settings 0 clock.force-rate 0`.
 Volcasm checks the format (point 1) but cannot see enhancements or the
 volume, so please check points 2 and 3 yourself.
 
+## Factory reset
+
+Menu → Volca → "Restore factory samples…" sends KORG's factory samples to
+all 100 slots and empties the 10 sequences, as on a new volca. The transfer
+takes about 13 minutes; keep the computer awake and the volume unchanged.
+"Erase all samples…" empties all slots in about 10 seconds. Both replace
+what is on the volca: it cannot be read back, so keep a project with your
+own samples.
+
 ## Settings and files
 
 Settings are kept in `~/.config/volcasm/` (Linux and macOS) and

@@ -33,17 +33,28 @@ pub enum MenuAction {
     /// Close and start the installed new version.
     RestartToUpdate,
     OpenReleasePage,
+    /// Send the factory samples and empty sequences to the volca.
+    FactoryReset,
+    /// Erase all samples on the volca.
+    EraseAllSamples,
     /// Close the program (asks first about unsaved changes).
     Quit,
 }
 
 impl MenuAction {
-    /// File actions change what the window shows, so the menu gets out of
-    /// the way; settings, updates and credits keep it open.
+    /// File actions change what the window shows and the volca actions
+    /// open the transfer dialog, so the menu gets out of the way; settings,
+    /// updates and credits keep it open.
     fn closes_menu(self) -> bool {
         matches!(
             self,
-            Self::New | Self::Open | Self::Save | Self::SaveAs | Self::Quit
+            Self::New
+                | Self::Open
+                | Self::Save
+                | Self::SaveAs
+                | Self::Quit
+                | Self::FactoryReset
+                | Self::EraseAllSamples
         )
     }
 }
@@ -167,6 +178,28 @@ pub fn show(
                         });
                         if let Some(chosen) = updates_section(ui, &updates) {
                             action = Some(chosen);
+                        }
+                        ui.add_space(16.0);
+                        ui.separator();
+                        ui.add_space(8.0);
+                        ui.label(style::label("Volca"));
+                        ui.add_space(4.0);
+                        for (icon, text, chosen) in [
+                            (
+                                style::icon::FACTORY,
+                                "restore factory samples…",
+                                MenuAction::FactoryReset,
+                            ),
+                            (
+                                style::icon::TRASH,
+                                "erase all samples…",
+                                MenuAction::EraseAllSamples,
+                            ),
+                        ] {
+                            if item(ui, icon, text) {
+                                action = Some(chosen);
+                            }
+                            ui.add_space(4.0);
                         }
                         // About and Quit sit at the bottom of the menu: the
                         // gap above them fills the window. Their height is

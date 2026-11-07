@@ -37,6 +37,17 @@ pub enum MenuAction {
     Quit,
 }
 
+impl MenuAction {
+    /// File actions change what the window shows, so the menu gets out of
+    /// the way; settings, updates and credits keep it open.
+    fn closes_menu(self) -> bool {
+        matches!(
+            self,
+            Self::New | Self::Open | Self::Save | Self::SaveAs | Self::Quit
+        )
+    }
+}
+
 /// What the menu shows about updates.
 pub struct UpdateView<'a> {
     /// Checked automatically at start.
@@ -45,7 +56,8 @@ pub struct UpdateView<'a> {
 }
 
 /// Shows the menu while `open` (or sliding out). Sets `open` to false when
-/// it should close; returns the chosen action.
+/// it should close (a file action, Esc, a click outside); returns the
+/// chosen action.
 /// `memory_in_mb`: the current memory meter unit, for the toggle; `logo`:
 /// the program icon, shown beside the name.
 pub fn show(
@@ -179,10 +191,12 @@ pub fn show(
                 });
         });
 
-    if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+    // Esc in a window over the menu (credits) closes only that window.
+    let modal_open = ctx.memory(|m| m.top_modal_layer()).is_some();
+    if !modal_open && ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
         *open = false;
     }
-    if action.is_some() {
+    if action.is_some_and(MenuAction::closes_menu) {
         *open = false;
     }
     action

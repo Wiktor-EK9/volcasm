@@ -19,3 +19,4 @@ gen 44100 1 sine_44100_mono_s16.aiff -c:a pcm_s16be
 gen 44100 1 sine_44100_mono.flac -c:a flac
 gen 44100 1 sine_44100_mono.mp3 -c:a libmp3lame -b:a 128k
 gen 44100 2 sine_44100_stereo.ogg -c:a libvorbis -q:a 5
+gen 44100 1 sine_44100_mono.m4a -c:a aac -b:a 128k

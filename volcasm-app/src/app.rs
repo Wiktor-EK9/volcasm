@@ -28,7 +28,19 @@ use volcasm_core::project::Target;
 const SILENCE_THRESHOLD: i16 = 328;
 
 /// Audio file extensions offered when loading a sample.
-const AUDIO_EXTENSIONS: [&str; 7] = ["wav", "aif", "aiff", "flac", "mp3", "ogg", "oga"];
+const AUDIO_EXTENSIONS: [&str; 9] = [
+    "wav", "aif", "aiff", "flac", "mp3", "ogg", "oga", "m4a", "aac",
+];
+
+/// `extensions` in lower and upper case for a file dialog filter: the
+/// desktop portal matches its patterns case-sensitively, so `SONG.MP3`
+/// would not be listed under `*.mp3`.
+fn any_case(extensions: &[&str]) -> Vec<String> {
+    extensions
+        .iter()
+        .flat_map(|e| [e.to_lowercase(), e.to_uppercase()])
+        .collect()
+}
 
 /// Options from the command line.
 #[derive(Debug, Default)]
@@ -360,7 +372,7 @@ impl VolcasmApp {
 
     fn pick_sample(&mut self, slot: usize) {
         if let Some(paths) = rfd::FileDialog::new()
-            .add_filter("Audio", &AUDIO_EXTENSIONS)
+            .add_filter("Audio", &any_case(&AUDIO_EXTENSIONS))
             .pick_files()
         {
             self.load_samples(slot, paths);
@@ -873,9 +885,9 @@ impl VolcasmApp {
     /// Asks for a `.volcasm` or `.vsj` file and opens it.
     fn open_dialog(&mut self) {
         if let Some(path) = rfd::FileDialog::new()
-            .add_filter("Volcasm or Vosyr project", &["volcasm", "vsj"])
-            .add_filter("Volcasm project", &["volcasm"])
-            .add_filter("Vosyr project", &["vsj"])
+            .add_filter("Volcasm or Vosyr project", &any_case(&["volcasm", "vsj"]))
+            .add_filter("Volcasm project", &any_case(&["volcasm"]))
+            .add_filter("Vosyr project", &any_case(&["vsj"]))
             .pick_file()
         {
             let is_vsj = path

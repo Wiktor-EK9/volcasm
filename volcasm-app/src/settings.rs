@@ -35,6 +35,9 @@ pub struct Settings {
     /// Look for a new version at start (D25).
     #[serde(default = "yes")]
     pub check_updates: bool,
+    /// The first-start window (theme, memory unit, updates) was answered.
+    #[serde(default)]
+    pub welcome_done: bool,
 }
 
 fn yes() -> bool {
@@ -47,6 +50,7 @@ impl Default for Settings {
             theme: None,
             memory_unit: MemoryUnit::default(),
             check_updates: true,
+            welcome_done: false,
         }
     }
 }
@@ -159,11 +163,18 @@ mod tests {
             theme: Some(Theme::Light),
             memory_unit: MemoryUnit::Mb,
             check_updates: false,
+            welcome_done: true,
         };
         let json = serde_json::to_string(&s).unwrap();
         assert_eq!(
             json,
-            r#"{"theme":"light","memory_unit":"mb","check_updates":false}"#
+            r#"{"theme":"light","memory_unit":"mb","check_updates":false,"welcome_done":true}"#
+        );
+        // Files written before the first-start window existed show it once.
+        assert!(
+            !serde_json::from_str::<Settings>(r#"{"theme":"dark","check_updates":false}"#)
+                .unwrap()
+                .welcome_done
         );
         // Files written before the memory unit existed still load.
         assert_eq!(

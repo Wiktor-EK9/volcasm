@@ -4,7 +4,7 @@ use eframe::egui::{self, Ui};
 use volcasm_audio::OutputInfo;
 
 use super::style;
-use crate::state::AppState;
+use crate::state::{AppState, LOSSLESS_BITS, MIN_TRANSFER_BITS};
 
 /// Progress of a running transfer, for display.
 #[derive(Clone)]
@@ -22,6 +22,15 @@ pub enum TransferAction {
     SendCurrentPattern,
     Cancel,
     RefreshOutputs,
+}
+
+/// Name of a transfer quality in the list.
+fn quality_text(bits: u32) -> String {
+    if bits == LOSSLESS_BITS {
+        style::caps(&format!("{bits} bit · lossless"))
+    } else {
+        style::caps(&format!("{bits} bit"))
+    }
 }
 
 pub fn show(
@@ -55,6 +64,43 @@ pub fn show(
         &mut state.transfer.erase_empty,
         style::label("Erase checked empty slots"),
     );
+    ui.horizontal(|ui| {
+        // The list is drawn taller than the row it is laid out in (a
+        // button's text and padding against the interaction height) and
+        // hangs below it: the label moves down by half the difference to
+        // sit on the list's center line.
+        let row = ui.spacing().interact_size.y;
+        let list = (ui.text_style_height(&egui::TextStyle::Button)
+            + 2.0 * ui.spacing().button_padding.y)
+            .max(row);
+        let text = egui::WidgetText::from(style::label("Quality")).into_galley(
+            ui,
+            None,
+            f32::INFINITY,
+            egui::TextStyle::Body,
+        );
+        let (rect, _) =
+            ui.allocate_exact_size(egui::vec2(text.size().x, row), egui::Sense::hover());
+        let top = rect.center().y + (list - row) / 2.0 - text.size().y / 2.0;
+        ui.painter().galley(
+            egui::pos2(rect.left(), top),
+            text,
+            ui.visuals().text_color(),
+        );
+        egui::ComboBox::from_id_salt("transfer-bits")
+            .selected_text(quality_text(state.transfer.bits))
+            .width(170.0)
+            .show_ui(ui, |ui| {
+                for bits in (MIN_TRANSFER_BITS..=LOSSLESS_BITS).rev() {
+                    ui.selectable_value(&mut state.transfer.bits, bits, quality_text(bits));
+                }
+            });
+    })
+    .response
+    .on_hover_text(style::caps(
+        "Fewer bits: a shorter transfer, more noise in the sample. \
+         The sample takes the same memory on the volca.",
+    ));
 
     style::subsection(ui, &style::with_icon(style::icon::STEPS, "sequences"));
     ui.horizontal_wrapped(|ui| {

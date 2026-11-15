@@ -10,9 +10,12 @@ use volcasm_core::pattern::{MotionRow, PARTS, Pattern};
 use volcasm_core::project::{Project, Slot, Target, file};
 use volcasm_core::sample::{Sample, edit};
 
-/// Samples are always sent compressed to 16 bits: lossless (checked on
-/// hardware) and a shorter stream.
-pub const TRANSFER_BITS: u32 = 16;
+/// Samples are sent compressed to this many bits: lossless (checked on
+/// hardware) and a shorter stream than uncompressed.
+pub const LOSSLESS_BITS: u32 = 16;
+/// Fewest bits SYRO compresses a sample to. Below [`LOSSLESS_BITS`] the
+/// sample is quantized (lossy) and the stream gets shorter still.
+pub const MIN_TRANSFER_BITS: u32 = 8;
 
 /// Name of a new project.
 pub const DEFAULT_PROJECT_NAME: &str = "New Project";
@@ -21,12 +24,25 @@ pub const DEFAULT_PROJECT_NAME: &str = "New Project";
 pub const UNDO_DEPTH: usize = 10;
 
 /// Transfer settings.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TransferSettings {
     /// Also erase checked slots that are empty in the project.
     pub erase_empty: bool,
     /// Output id from `volcasm_audio::list_outputs`; `None` = default.
     pub device: Option<String>,
+    /// Bits samples are sent with, [`MIN_TRANSFER_BITS`] to
+    /// [`LOSSLESS_BITS`].
+    pub bits: u32,
+}
+
+impl Default for TransferSettings {
+    fn default() -> Self {
+        Self {
+            erase_empty: false,
+            device: None,
+            bits: LOSSLESS_BITS,
+        }
+    }
 }
 
 /// Main view.

@@ -4,6 +4,7 @@
 use eframe::egui::{self, Color32, Id, Order, Pos2, Rect, Sense, vec2};
 
 use super::style;
+use crate::settings::Theme;
 use crate::update::UpdateState;
 
 /// Width of the menu, about the side bar's.
@@ -19,8 +20,8 @@ pub enum MenuAction {
     Open,
     Save,
     SaveAs,
-    /// Switch to the light theme (`true`) or the dark one.
-    Theme(bool),
+    /// Switch to this theme; `None` follows the system.
+    Theme(Option<Theme>),
     /// Show the memory meter in megabytes (`true`) or blocks.
     MemoryInMb(bool),
     /// Open the credits window.
@@ -69,11 +70,12 @@ pub struct UpdateView<'a> {
 /// Shows the menu while `open` (or sliding out). Sets `open` to false when
 /// it should close (a file action, Esc, a click outside); returns the
 /// chosen action.
-/// `memory_in_mb`: the current memory meter unit, for the toggle; `logo`:
-/// the program icon, shown beside the name.
+/// `theme` and `memory_in_mb`: the current choices, for the toggles;
+/// `logo`: the program icon, shown beside the name.
 pub fn show(
     ctx: &egui::Context,
     open: &mut bool,
+    theme: Option<Theme>,
     memory_in_mb: bool,
     updates: UpdateView<'_>,
     logo: &egui::TextureHandle,
@@ -149,33 +151,13 @@ pub fn show(
                         ui.add_space(16.0);
                         ui.separator();
                         ui.add_space(8.0);
-                        ui.label(style::label("Theme"));
-                        ui.horizontal(|ui| {
-                            let light = style::is_light();
-                            for (icon, name, value) in [
-                                (style::icon::MOON, "dark", false),
-                                (style::icon::SUN, "light", true),
-                            ] {
-                                let text = style::icon_label(icon, name).size(16.0);
-                                if ui.selectable_label(light == value, text).clicked()
-                                    && light != value
-                                {
-                                    action = Some(MenuAction::Theme(value));
-                                }
-                            }
-                        });
+                        if let Some(chosen) = theme_row(ui, theme) {
+                            action = Some(MenuAction::Theme(chosen));
+                        }
                         ui.add_space(8.0);
-                        ui.label(style::label("Memory shown in"));
-                        ui.horizontal(|ui| {
-                            for (name, value) in [("blocks", false), ("mb", true)] {
-                                let text = egui::RichText::new(style::caps(name)).size(16.0);
-                                if ui.selectable_label(memory_in_mb == value, text).clicked()
-                                    && memory_in_mb != value
-                                {
-                                    action = Some(MenuAction::MemoryInMb(value));
-                                }
-                            }
-                        });
+                        if let Some(chosen) = memory_row(ui, memory_in_mb) {
+                            action = Some(MenuAction::MemoryInMb(chosen));
+                        }
                         if let Some(chosen) = updates_section(ui, &updates) {
                             action = Some(chosen);
                         }
@@ -240,16 +222,9 @@ pub fn show(
 fn updates_section(ui: &mut egui::Ui, view: &UpdateView<'_>) -> Option<MenuAction> {
     let mut action = None;
     ui.add_space(8.0);
-    ui.label(style::label("Check for updates at start"));
-    ui.horizontal(|ui| {
-        for (name, value) in [("on", true), ("off", false)] {
-            let text = egui::RichText::new(style::caps(name)).size(16.0);
-            if ui.selectable_label(view.at_start == value, text).clicked() && view.at_start != value
-            {
-                action = Some(MenuAction::CheckUpdatesAtStart(value));
-            }
-        }
-    });
+    if let Some(chosen) = updates_row(ui, view.at_start) {
+        action = Some(MenuAction::CheckUpdatesAtStart(chosen));
+    }
     ui.add_space(8.0);
     // Show a spinner in place of the icon.
     let mut busy = false;
@@ -336,6 +311,127 @@ fn updates_section(ui: &mut egui::Ui, view: &UpdateView<'_>) -> Option<MenuActio
     action
 }
 
+/// One row of toggles under a label; returns the newly chosen value.
+fn choice_row<T: Copy + PartialEq>(
+    ui: &mut egui::Ui,
+    label: &str,
+    current: T,
+    options: &[(egui::RichText, T)],
+) -> Option<T> {
+    let mut chosen = None;
+    ui.label(style::label(label));
+    ui.horizontal(|ui| {
+        for (text, value) in options {
+            if ui
+                .selectable_label(current == *value, text.clone())
+                .clicked()
+                && current != *value
+            {
+                chosen = Some(*value);
+            }
+        }
+    });
+    chosen
+}
+
+/// Dark, light or the system's theme (`None`).
+fn theme_row(ui: &mut egui::Ui, current: Option<Theme>) -> Option<Option<Theme>> {
+    let option = |icon: &str, name: &str, value| (style::icon_label(icon, name).size(16.0), value);
+    choice_row(
+        ui,
+        "Theme",
+        current,
+        &[
+            option(style::icon::MOON, "dark", Some(Theme::Dark)),
+            option(style::icon::SUN, "light", Some(Theme::Light)),
+            option(style::icon::MONITOR, "system", None),
+        ],
+    )
+}
+
+/// Memory meter in blocks or megabytes (`true`).
+fn memory_row(ui: &mut egui::Ui, in_mb: bool) -> Option<bool> {
+    let option = |name: &str, value| (egui::RichText::new(style::caps(name)).size(16.0), value);
+    choice_row(
+        ui,
+        "Memory shown in",
+        in_mb,
+        &[option("blocks", false), option("mb", true)],
+    )
+}
+
+/// Checking for a new version at start, on or off.
+fn updates_row(ui: &mut egui::Ui, on: bool) -> Option<bool> {
+    let option = |name: &str, value| (egui::RichText::new(style::caps(name)).size(16.0), value);
+    choice_row(
+        ui,
+        "Check for updates at start",
+        on,
+        &[option("on", true), option("off", false)],
+    )
+}
+
+/// What the first-start window reports.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WelcomeAction {
+    Theme(Option<Theme>),
+    MemoryInMb(bool),
+    CheckUpdates(bool),
+    /// START, Esc or a click outside: keep the choices shown.
+    Done,
+}
+
+/// Small window at the first start: theme, memory unit and update checks,
+/// showing the current choices. Each toggle is reported as it changes, so
+/// the theme switches at once.
+pub fn welcome_dialog(
+    ctx: &egui::Context,
+    logo: &egui::TextureHandle,
+    theme: Option<Theme>,
+    memory_in_mb: bool,
+    check_updates: bool,
+) -> Option<WelcomeAction> {
+    let mut action = None;
+    let response = egui::Modal::new(Id::new("welcome")).show(ctx, |ui| {
+        ui.set_width(340.0);
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            ui.add(egui::Image::new(logo).fit_to_exact_size(vec2(28.0, 28.0)));
+            ui.label(style::brand("welcome", 24.0));
+        });
+        ui.add_space(4.0);
+        ui.label(
+            style::label("Pick your settings. You can change them later in the menu.")
+                .color(style::text_dim()),
+        );
+        ui.add_space(12.0);
+        if let Some(chosen) = theme_row(ui, theme) {
+            action = Some(WelcomeAction::Theme(chosen));
+        }
+        ui.add_space(8.0);
+        if let Some(chosen) = memory_row(ui, memory_in_mb) {
+            action = Some(WelcomeAction::MemoryInMb(chosen));
+        }
+        ui.add_space(8.0);
+        if let Some(chosen) = updates_row(ui, check_updates) {
+            action = Some(WelcomeAction::CheckUpdates(chosen));
+        }
+        ui.add_space(16.0);
+        ui.vertical_centered(|ui| {
+            ui.add(
+                egui::Button::new(style::icon_label(style::icon::CHECK, "start").size(18.0))
+                    .min_size(vec2(160.0, 36.0)),
+            )
+            .clicked()
+        })
+        .inner
+    });
+    if response.inner || response.should_close() {
+        action = Some(WelcomeAction::Done);
+    }
+    action
+}
+
 const GITHUB: &str = "https://github.com/Wiktor-EK9/volcasm";
 const WEBSITE: &str = "https://volcasm.wmachalica.pl";
 
@@ -352,7 +448,7 @@ fn about(ui: &mut egui::Ui) -> bool {
         ))
         .size(16.0),
     );
-    ui.label(style::label("by Wiktor Machalica").size(16.0));
+    ui.label(style::label("by Wiktor-EK9").size(16.0));
     ui.add_space(4.0);
     ui.horizontal(|ui| {
         ui.hyperlink_to(

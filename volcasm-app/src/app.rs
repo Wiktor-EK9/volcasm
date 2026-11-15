@@ -13,7 +13,7 @@ use volcasm_core::syro::{STREAM_SAMPLE_RATE, encode};
 use crate::preview::SequencePreview;
 use crate::settings::{self, Settings};
 use crate::state::{AppState, PartView, View, name_from_path, wav_file_name};
-use crate::ui::menu::{self, MenuAction, UpdateView};
+use crate::ui::menu::{self, MenuAction, UpdateView, WelcomeAction};
 use crate::ui::record_panel::{self, RecordAction};
 use crate::ui::sequences;
 use crate::ui::slot_panel::{self, NameEdit, PanelAction};
@@ -63,6 +63,8 @@ pub struct Options {
     pub menu: bool,
     /// Start with the credits window open.
     pub credits: bool,
+    /// Start with the first-start window open, even after it was answered.
+    pub welcome: bool,
     /// Start with the factory reset transfer dialog open.
     pub factory_reset: bool,
 }
@@ -136,6 +138,8 @@ pub struct VolcasmApp {
     settings: Settings,
     menu_open: bool,
     credits_open: bool,
+    /// First-start window (theme, memory unit, updates) open.
+    welcome_open: bool,
     update: UpdateState,
     update_check: Option<Receiver<Result<Release, String>>>,
     /// The release being downloaded, and the news from the download.
@@ -172,6 +176,7 @@ impl VolcasmApp {
                 }
             },
         }
+        let welcome_open = options.welcome || !settings.welcome_done;
         let mut app = Self {
             state: AppState::default(),
             messages: Vec::new(),
@@ -191,6 +196,7 @@ impl VolcasmApp {
             settings,
             menu_open: options.menu,
             credits_open: options.credits,
+            welcome_open,
             update: UpdateState::Idle,
             update_check: None,
             update_download: None,
@@ -225,10 +231,69 @@ impl VolcasmApp {
         if options.factory_reset {
             app.start_transfer(Target::factory_reset(app.state.project.device()));
         }
-        if app.settings.check_updates {
+        // At the first start the check waits for the user's choice.
+        if app.settings.check_updates && !app.welcome_open {
             app.check_for_update(&cc.egui_ctx);
         }
         app
+    }
+
+    /// Switches to `theme` (`None`: the system's) and remembers it.
+    fn set_theme(&mut self, ctx: &egui::Context, theme: Option<settings::Theme>) {
+        match theme {
+            Some(theme) => style::set_light(ctx, theme == settings::Theme::Light),
+            None => match settings::system_prefers_light() {
+                Some(light) => style::set_light(ctx, light),
+                None => style::follow_system(ctx),
+            },
+        }
+        self.settings.theme = theme;
+        self.save_settings();
+    }
+
+    fn set_memory_in_mb(&mut self, mb: bool) {
+        self.settings.memory_unit = if mb {
+            settings::MemoryUnit::Mb
+        } else {
+            settings::MemoryUnit::Blocks
+        };
+        self.save_settings();
+    }
+
+    fn save_settings(&mut self) {
+        if let Err(err) = self.settings.save() {
+            self.error(format!("{}: {err}", style::caps("Cannot save settings")));
+        }
+    }
+
+    fn welcome(&mut self, ctx: &egui::Context) {
+        let in_mb = self.settings.memory_unit == settings::MemoryUnit::Mb;
+        let chosen = menu::welcome_dialog(
+            ctx,
+            &self.logo,
+            self.settings.theme,
+            in_mb,
+            self.settings.check_updates,
+        );
+        match chosen {
+            Some(WelcomeAction::Theme(theme)) => self.set_theme(ctx, theme),
+            Some(WelcomeAction::MemoryInMb(mb)) => self.set_memory_in_mb(mb),
+            Some(WelcomeAction::CheckUpdates(on)) => {
+                self.settings.check_updates = on;
+                self.save_settings();
+            }
+            Some(WelcomeAction::Done) => {
+                self.welcome_open = false;
+                self.settings.welcome_done = true;
+                self.save_settings();
+                if self.settings.check_updates
+                    && matches!(self.update, UpdateState::Idle | UpdateState::Failed(_))
+                {
+                    self.check_for_update(ctx);
+                }
+            }
+            None => {}
+        }
     }
 
     fn info(&mut self, text: impl Into<String>) {
@@ -985,7 +1050,8 @@ impl VolcasmApp {
             at_start: self.settings.check_updates,
             state: &self.update,
         };
-        match menu::show(ctx, &mut self.menu_open, in_mb, updates, &self.logo) {
+        let theme = self.settings.theme;
+        match menu::show(ctx, &mut self.menu_open, theme, in_mb, updates, &self.logo) {
             Some(MenuAction::New) => self.discard_then(Discarding::New),
             Some(MenuAction::Open) => self.open_dialog(),
             Some(MenuAction::Save) => self.save(false),
@@ -999,9 +1065,7 @@ impl VolcasmApp {
             Some(MenuAction::EraseAllSamples) => self.start_transfer(vec![Target::EraseAllSamples]),
             Some(MenuAction::CheckUpdatesAtStart(on)) => {
                 self.settings.check_updates = on;
-                if let Err(err) = self.settings.save() {
-                    self.error(format!("{}: {err}", style::caps("Cannot save settings")));
-                }
+                self.save_settings();
                 if on && matches!(self.update, UpdateState::Idle | UpdateState::Failed(_)) {
                     self.check_for_update(ctx);
                 }
@@ -1032,27 +1096,8 @@ impl VolcasmApp {
                     ctx.send_viewport_cmd(ViewportCommand::Close);
                 }
             }
-            Some(MenuAction::Theme(light)) => {
-                style::set_light(ctx, light);
-                self.settings.theme = Some(if light {
-                    settings::Theme::Light
-                } else {
-                    settings::Theme::Dark
-                });
-                if let Err(err) = self.settings.save() {
-                    self.error(format!("{}: {err}", style::caps("Cannot save settings")));
-                }
-            }
-            Some(MenuAction::MemoryInMb(mb)) => {
-                self.settings.memory_unit = if mb {
-                    settings::MemoryUnit::Mb
-                } else {
-                    settings::MemoryUnit::Blocks
-                };
-                if let Err(err) = self.settings.save() {
-                    self.error(format!("{}: {err}", style::caps("Cannot save settings")));
-                }
-            }
+            Some(MenuAction::Theme(theme)) => self.set_theme(ctx, theme),
+            Some(MenuAction::MemoryInMb(mb)) => self.set_memory_in_mb(mb),
             None => {}
         }
     }
@@ -1190,6 +1235,7 @@ impl VolcasmApp {
         if self.discarding.is_some()
             || self.menu_open
             || self.credits_open
+            || self.welcome_open
             || ctx.text_edit_focused()
         {
             return;
@@ -1568,6 +1614,9 @@ impl eframe::App for VolcasmApp {
         self.menu(&ctx);
         if self.credits_open {
             menu::credits_dialog(&ctx, &mut self.credits_open);
+        }
+        if self.welcome_open {
+            self.welcome(&ctx);
         }
         self.confirm_discard(&ctx);
         self.screenshot_step(&ctx);

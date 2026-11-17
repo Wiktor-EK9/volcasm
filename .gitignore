@@ -5,3 +5,7 @@ tests/fixtures/**/*.png
 # UI sketches and screenshots for redesign work; kept out of the repo.
 docs/ui/
 /dist
+
+# Development notes kept locally, not published.
+/CLAUDE.md
+/DECISIONS.md

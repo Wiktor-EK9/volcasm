@@ -716,7 +716,7 @@ SyroStatus SyroVolcaSample_Start(SyroHandle *pHandle, SyroData *pData, int NumOf
 				free((uint8_t *)psm);
 				return Status_NotEnoughMemory;
 			};
-			memset(psms[i].comp_buf, 0, comp_dest_size);
+			memset(psms[i].comp_buf, 0, comp_dest_size + comp_ofs);	/* volcasm: whole buffer, see VENDORED_FROM */
 			if (comp_ofs) {
 				memcpy(psms[i].comp_buf, pData[i].pData, comp_ofs);
 			}

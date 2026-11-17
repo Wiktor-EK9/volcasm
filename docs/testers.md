@@ -78,7 +78,8 @@ the format to 44.1 kHz as in point 1 and try again.
    In the older Control Panel: Sound → device → Properties → Advanced →
    Default Format.
 2. On the same page turn off **Audio enhancements** (and any "Loudness
-   Equalization", Dolby or vendor sound effects).
+   Equalization", Dolby or vendor sound effects) and **Spatial sound**
+   (Windows Sonic, Dolby Atmos).
 3. Set the device volume to 100%.
 
 Volcasm sees the format (point 1) but cannot see enhancements or the

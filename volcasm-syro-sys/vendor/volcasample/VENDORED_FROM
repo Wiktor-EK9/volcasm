@@ -8,3 +8,9 @@ Local changes (D24), each also in volcasm-syro-sys/patches/:
 - 0001-comp-bitbase-bounds.patch: syro/korg_syro_comp.c, SyroComp_CompBlock
   read pBitBase[4] (one past the end) after the 4th bit base; the result
   depended on stack contents. Bounds check added.
+- 0002-comp-buf-init.patch: syro/korg_syro_volcasample.c,
+  SyroVolcaSample_Start zeroed comp_dest_size bytes of a buffer of
+  comp_dest_size + comp_ofs; for whole-memory data (comp_ofs = 0x4000) the
+  last 16 KiB were sent and CRC'd uninitialized (found by MemorySanitizer;
+  the stream differed on macOS). Whole buffer zeroed; on Linux the stream is
+  unchanged, since fresh heap pages were already zero.

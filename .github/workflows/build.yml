@@ -125,9 +125,17 @@ jobs:
             "v$version") ;;
             *) echo "tag $tag does not match version $version in Cargo.toml"; exit 1 ;;
           esac
+          # Release notes: the CHANGELOG.md section of this version, else
+          # notes generated from the merged pull requests.
+          awk -v v="${tag#v}" '
+            $0 ~ "^## \\[" v "\\]" { on = 1; next }
+            on && /^## / { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          if [ -s notes.md ]; then notes="--notes-file ../notes.md"; else notes="--generate-notes"; fi
           cd artifacts
           files=$(ls *.AppImage *.zip)
           sha256sum $files > SHA256SUMS
           cat SHA256SUMS
           gh release create "$tag" --repo "$GITHUB_REPOSITORY" --title "volcasm ${tag#v}" \
-            --generate-notes $flags $files SHA256SUMS
+            $notes $flags $files SHA256SUMS

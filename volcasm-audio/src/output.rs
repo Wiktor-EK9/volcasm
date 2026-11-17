@@ -1,12 +1,14 @@
-//! Playback of a SYRO stream through cpal, with verification that the device
-//! runs at 44.1 kHz before any data is sent.
+//! Playback of a SYRO stream through cpal, with verification of the audio
+//! path before any data is sent.
 //!
 //! Sequence: stream start with silence (pre-roll) while the audio path is
 //! verified, then the stream data, then silence until the device buffer has
 //! played out. On Linux the running PipeWire graph is checked (device rate,
 //! clock settings, volumes); the device is known only once the stream is
 //! linked, so all checks happen during the pre-roll. On other systems the
-//! device mix format is checked.
+//! stream is resampled to the device mix rate when it is not 44.1 kHz (with
+//! a warning), so that the system does not convert it, and the mix rate is
+//! checked again during the pre-roll and after the data (D23).
 
 use std::fmt;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, AtomicUsize, Ordering};
@@ -17,7 +19,9 @@ use std::time::{Duration, Instant};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{BufferSize, DeviceId, ErrorKind, OutputCallbackInfo, StreamConfig};
 
-use crate::check::{self, Problem, STREAM_RATE, Warning};
+use volcasm_core::syro::ResampleError;
+
+use crate::check::{self, Problem, Warning};
 use crate::graph::GraphError;
 
 /// How long the pre-roll waits for the audio path to verify before giving up.
@@ -92,6 +96,7 @@ pub enum TransferError {
     Audio(cpal::Error),
     /// The requested output does not exist.
     DeviceNotFound(String),
+    Resample(ResampleError),
 }
 
 impl fmt::Display for TransferError {
@@ -104,6 +109,7 @@ impl fmt::Display for TransferError {
             Self::Graph(err) => write!(f, "{err}"),
             Self::Audio(err) => write!(f, "audio error: {err}"),
             Self::DeviceNotFound(id) => write!(f, "audio output not found: {id}"),
+            Self::Resample(err) => write!(f, "{err}"),
         }
     }
 }
@@ -113,6 +119,12 @@ impl std::error::Error for TransferError {}
 impl From<cpal::Error> for TransferError {
     fn from(err: cpal::Error) -> Self {
         Self::Audio(err)
+    }
+}
+
+impl From<ResampleError> for TransferError {
+    fn from(err: ResampleError) -> Self {
+        Self::Resample(err)
     }
 }
 
@@ -131,6 +143,8 @@ struct Shared {
     cancel: AtomicBool,
     /// Data frames handed to the device so far.
     written: AtomicUsize,
+    /// Data frames in total (changes if the stream is resampled).
+    total: AtomicUsize,
     /// Set by the callback after the last data frame (or on cancel).
     done: AtomicBool,
     /// Largest observed callback-to-playback delay, in nanoseconds.
@@ -145,14 +159,16 @@ struct Shared {
 /// A running transfer.
 pub struct Transfer {
     shared: Arc<Shared>,
-    total: usize,
     thread: JoinHandle<Result<Report, TransferError>>,
 }
 
 impl Transfer {
-    /// Data frames sent so far and in total.
+    /// Data frames sent so far and in total, at the output rate.
     pub fn progress(&self) -> (usize, usize) {
-        (self.shared.written.load(Ordering::Relaxed), self.total)
+        (
+            self.shared.written.load(Ordering::Relaxed),
+            self.shared.total.load(Ordering::Relaxed),
+        )
     }
 
     pub fn phase(&self) -> Phase {
@@ -199,7 +215,7 @@ impl Canceller {
 /// thread.
 pub fn start(frames: Vec<[i16; 2]>, options: TransferOptions) -> Transfer {
     let shared = Arc::new(Shared::default());
-    let total = frames.len();
+    shared.total.store(frames.len(), Ordering::Relaxed);
     let thread = thread::spawn({
         let shared = shared.clone();
         move || {
@@ -208,11 +224,7 @@ pub fn start(frames: Vec<[i16; 2]>, options: TransferOptions) -> Transfer {
             result
         }
     });
-    Transfer {
-        shared,
-        total,
-        thread,
-    }
+    Transfer { shared, thread }
 }
 
 fn set_phase(shared: &Shared, phase: Phase) {
@@ -235,9 +247,12 @@ fn run(
             .default_output_device()
             .ok_or_else(|| TransferError::DeviceNotFound("default".into()))?,
     };
+    let rate = output_rate(&device)?;
+    let frames = volcasm_core::syro::resample_stream(&frames, rate)?;
+    shared.total.store(frames.len(), Ordering::Relaxed);
     let config = StreamConfig {
         channels: 2,
-        sample_rate: STREAM_RATE,
+        sample_rate: rate,
         buffer_size: BufferSize::Default,
     };
     let mut feeder = Feeder::new(frames, shared.clone());
@@ -273,7 +288,7 @@ fn run(
     let deadline = Instant::now() + VERIFY_TIMEOUT;
     let warnings = loop {
         take_stream_error(shared)?;
-        match verify(&device)? {
+        match verify(&device, rate)? {
             Ok(warnings) => break warnings,
             Err(problem) if problem.is_transient() && Instant::now() < deadline => {
                 thread::sleep(VERIFY_INTERVAL);
@@ -296,7 +311,7 @@ fn run(
     // The rate must not have changed while the data was playing. Checked
     // before the stream is closed: its PipeWire node goes away with it.
     set_phase(shared, Phase::Draining);
-    let after = verify(&device)?;
+    let after = verify(&device, rate)?;
     let delay = Duration::from_nanos(shared.delay_ns.load(Ordering::Relaxed)).min(MAX_DELAY);
     thread::sleep(delay + TAIL_MARGIN);
     drop(stream);
@@ -307,9 +322,27 @@ fn run(
     Ok(report(shared, warnings, cancelled))
 }
 
+/// Rate of the stream sent to `device`. On Linux always 44.1 kHz: the
+/// PipeWire graph is checked and its resampling is accepted only on devices
+/// without 44.1 kHz (D18).
+#[cfg(target_os = "linux")]
+fn output_rate(_device: &cpal::Device) -> Result<u32, TransferError> {
+    Ok(check::STREAM_RATE)
+}
+
+/// Rate of the stream sent to `device`: the shared-mode mix rate, so that
+/// WASAPI does not convert the stream (D23).
+#[cfg(not(target_os = "linux"))]
+fn output_rate(device: &cpal::Device) -> Result<u32, TransferError> {
+    Ok(device.default_output_config()?.sample_rate())
+}
+
 /// Checks the PipeWire graph around our running stream.
 #[cfg(target_os = "linux")]
-fn verify(_device: &cpal::Device) -> Result<Result<Vec<Warning>, Problem>, TransferError> {
+fn verify(
+    _device: &cpal::Device,
+    _rate: u32,
+) -> Result<Result<Vec<Warning>, Problem>, TransferError> {
     let group = format!("cpal-{}", std::process::id());
     let is_ours = |node: &crate::graph::NodeState| {
         node.prop("node.group") == Some(group.as_str())
@@ -318,13 +351,16 @@ fn verify(_device: &cpal::Device) -> Result<Result<Vec<Warning>, Problem>, Trans
     Ok(check::verify(&crate::graph::snapshot()?, is_ours))
 }
 
-/// Checks the shared-mode mix format of the device: the stream is
-/// converted to it (WASAPI auto-conversion) without notice.
+/// Checks the shared-mode mix rate of the device against the `rate` the
+/// stream was prepared for: WASAPI converts any other rate without notice.
 #[cfg(not(target_os = "linux"))]
-fn verify(device: &cpal::Device) -> Result<Result<Vec<Warning>, Problem>, TransferError> {
+fn verify(
+    device: &cpal::Device,
+    rate: u32,
+) -> Result<Result<Vec<Warning>, Problem>, TransferError> {
     let name = device.description()?.name().to_owned();
-    let rate = device.default_output_config()?.sample_rate();
-    Ok(check::verify_mix_rate(&name, rate))
+    let mix_rate = device.default_output_config()?.sample_rate();
+    Ok(check::verify_mix_rate(&name, mix_rate, rate))
 }
 
 fn report(shared: &Shared, warnings: Vec<Warning>, cancelled: bool) -> Report {

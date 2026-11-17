@@ -10,6 +10,12 @@ const BLOCK_ALIGN: u16 = CHANNELS * BITS_PER_SAMPLE / 8;
 /// Writes a stereo 16-bit PCM WAV at [`STREAM_SAMPLE_RATE`] with the same
 /// 44-byte header as the SDK example (`RIFF`, `fmt ` of 16 bytes, `data`).
 pub fn stream_to_wav(frames: &[[i16; 2]]) -> Vec<u8> {
+    stream_to_wav_at(frames, STREAM_SAMPLE_RATE)
+}
+
+/// Same as [`stream_to_wav`] for a stream at `sample_rate` (a stream from
+/// [`crate::syro::resample_stream`]).
+pub fn stream_to_wav_at(frames: &[[i16; 2]], sample_rate: u32) -> Vec<u8> {
     let data_size = (frames.len() * BLOCK_ALIGN as usize) as u32;
     let mut wav = Vec::with_capacity(HEADER_SIZE + data_size as usize);
     wav.extend_from_slice(b"RIFF");
@@ -18,8 +24,8 @@ pub fn stream_to_wav(frames: &[[i16; 2]]) -> Vec<u8> {
     wav.extend_from_slice(&16u32.to_le_bytes());
     wav.extend_from_slice(&1u16.to_le_bytes()); // PCM
     wav.extend_from_slice(&CHANNELS.to_le_bytes());
-    wav.extend_from_slice(&STREAM_SAMPLE_RATE.to_le_bytes());
-    wav.extend_from_slice(&(STREAM_SAMPLE_RATE * BLOCK_ALIGN as u32).to_le_bytes());
+    wav.extend_from_slice(&sample_rate.to_le_bytes());
+    wav.extend_from_slice(&(sample_rate * BLOCK_ALIGN as u32).to_le_bytes());
     wav.extend_from_slice(&BLOCK_ALIGN.to_le_bytes());
     wav.extend_from_slice(&BITS_PER_SAMPLE.to_le_bytes());
     wav.extend_from_slice(b"data");

@@ -221,3 +221,170 @@ pub fn encode(items: &[SyroItem<'_>]) -> Result<Vec<[i16; 2]>, SyroError> {
     }
     Ok(out)
 }
+
+/// Chunk size (input frames) for [`resample_stream`].
+const RESAMPLE_CHUNK: usize = 1024;
+
+/// Error resampling a stream.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResampleError(String);
+
+impl fmt::Display for ResampleError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "resampling the stream failed: {}", self.0)
+    }
+}
+
+impl std::error::Error for ResampleError {}
+
+/// Converts a stream from [`encode`] (stereo, [`STREAM_SAMPLE_RATE`]) to
+/// `rate`, for outputs whose shared mixer runs at another rate (D23): the
+/// conversion is done here with a known resampler instead of by the system.
+///
+/// rubato's synchronous FFT resampler, processed in chunks so that long
+/// streams do not need a floating point copy. The resampler delay is
+/// trimmed (output aligned with the input) and the length is
+/// `ceil(len * rate / 44100)`. Samples are rounded and clipped to 16 bits.
+/// A stream already at `rate` is returned unchanged.
+pub fn resample_stream(frames: &[[i16; 2]], rate: u32) -> Result<Vec<[i16; 2]>, ResampleError> {
+    use rubato::audioadapter_buffers::direct::SequentialSliceOfSlices;
+    use rubato::{Fft, FixedSync, Resampler};
+
+    if rate == STREAM_SAMPLE_RATE {
+        return Ok(frames.to_vec());
+    }
+    let err = |e: &dyn std::error::Error| ResampleError(e.to_string());
+    let mut resampler = Fft::<f32>::new(
+        STREAM_SAMPLE_RATE as usize,
+        rate as usize,
+        RESAMPLE_CHUNK,
+        2,
+        FixedSync::Input,
+    )
+    .map_err(|e| err(&e))?;
+
+    let expected = (frames.len() as u64 * u64::from(rate)).div_ceil(u64::from(STREAM_SAMPLE_RATE));
+    let expected = usize::try_from(expected).map_err(|e| err(&e))?;
+    let mut out = Vec::with_capacity(expected);
+    let mut skip = resampler.output_delay();
+    let mut pos = 0;
+    let (mut left, mut right) = (Vec::new(), Vec::new());
+    while out.len() < expected {
+        // After the input ends, zeros flush the resampler.
+        let need = resampler.input_frames_next();
+        let chunk = &frames[pos.min(frames.len())..(pos + need).min(frames.len())];
+        pos += need;
+        left.clear();
+        right.clear();
+        for [l, r] in chunk {
+            left.push(f32::from(*l) / 32_768.0);
+            right.push(f32::from(*r) / 32_768.0);
+        }
+        left.resize(need, 0.0);
+        right.resize(need, 0.0);
+        let channels = [left.as_slice(), right.as_slice()];
+        let input = SequentialSliceOfSlices::new(&channels, 2, need).map_err(|e| err(&e))?;
+        let block = resampler.process(&input, None).map_err(|e| err(&e))?;
+        let data = block.take_data();
+        let produced = data.as_chunks::<2>().0;
+        let start = skip.min(produced.len());
+        skip -= start;
+        for [l, r] in &produced[start..] {
+            if out.len() == expected {
+                break;
+            }
+            out.push([to_i16(*l), to_i16(*r)]);
+        }
+    }
+    Ok(out)
+}
+
+/// Converts a sample in [-1, 1) to 16 bits with rounding and clipping.
+fn to_i16(x: f32) -> i16 {
+    (x * 32_768.0)
+        .round()
+        .clamp(f32::from(i16::MIN), f32::from(i16::MAX)) as i16
+}
+
+#[cfg(test)]
+mod resample_tests {
+    use super::*;
+
+    #[test]
+    fn same_rate_is_unchanged() {
+        let frames = [[1, -1], [i16::MAX, i16::MIN]];
+        assert_eq!(
+            resample_stream(&frames, STREAM_SAMPLE_RATE).unwrap(),
+            frames
+        );
+    }
+
+    #[test]
+    fn length_follows_ratio() {
+        for len in [0, 1, 1023, 1024, 1025, 44_100, 100_000] {
+            let out = resample_stream(&vec![[1000, -1000]; len], 48_000).unwrap();
+            assert_eq!(out.len(), (len * 48_000).div_ceil(44_100), "input {len}");
+        }
+    }
+
+    #[test]
+    fn tone_is_kept_and_aligned() {
+        // 1 kHz on the left, 3 kHz on the right, half scale.
+        let tone = |f: f64, t: f64| {
+            (0.5 * (2.0 * std::f64::consts::PI * f * t).sin() * 32_768.0).round() as i16
+        };
+        let frames: Vec<[i16; 2]> = (0..44_100)
+            .map(|n| {
+                let t = n as f64 / 44_100.0;
+                [tone(1000.0, t), tone(3000.0, t)]
+            })
+            .collect();
+        let out = resample_stream(&frames, 48_000).unwrap();
+        // Away from the edges, each output frame equals the tone at its time.
+        for (n, [l, r]) in out.iter().enumerate().skip(1000).take(46_000) {
+            let t = n as f64 / 48_000.0;
+            assert!(
+                (i32::from(*l) - i32::from(tone(1000.0, t))).abs() <= 4,
+                "left {n}"
+            );
+            assert!(
+                (i32::from(*r) - i32::from(tone(3000.0, t))).abs() <= 4,
+                "right {n}"
+            );
+        }
+    }
+
+    #[test]
+    fn syro_stream_does_not_clip() {
+        // Pseudo-random sample: dense data in every QAM symbol.
+        let mut x: u32 = 1;
+        let pcm: Vec<i16> = (0..20_000)
+            .map(|_| {
+                x = x.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                (x >> 16) as i16
+            })
+            .collect();
+        let frames = encode(&[SyroItem::SampleCompressed {
+            slot: 0,
+            pcm: &pcm,
+            sample_rate: 31_250,
+            bits: 16,
+        }])
+        .unwrap();
+        let peak = |f: &[[i16; 2]]| {
+            f.iter()
+                .flatten()
+                .map(|s| i32::from(*s).abs())
+                .max()
+                .unwrap()
+        };
+        let out = resample_stream(&frames, 48_000).unwrap();
+        // Overshoot of the band-limited signal must stay below full scale.
+        assert!(
+            peak(&out) < i32::from(i16::MAX),
+            "{} -> {}",
+            peak(&frames),
+            peak(&out)
+        );
+    }
+}

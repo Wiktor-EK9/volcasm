@@ -1,6 +1,8 @@
 //! Writes a SYRO stream WAV for playback into the volca sample SYNC IN.
 //!
-//! Usage: syro_wav <out.wav> <item>...
+//! Usage: syro_wav [--rate <hz>] <out.wav> <item>...
+//!   --rate <hz>                 resample the stream to <hz> as Volcasm does
+//!                               for outputs not at 44.1 kHz (D23)
 //!   s<slot>:<file.wav>          sample (16-bit mono WAV), slot 0-99
 //!   s<slot>c<bits>:<file.wav>   compressed sample, bits 8-16
 //!   e<slot>                     erase sample slot
@@ -15,8 +17,8 @@ use std::error::Error;
 use std::path::Path;
 use std::process::ExitCode;
 
-use volcasm_core::syro::{PATTERN_SIZE, SyroItem, encode};
-use volcasm_core::wav::stream_to_wav;
+use volcasm_core::syro::{PATTERN_SIZE, STREAM_SAMPLE_RATE, SyroItem, encode, resample_stream};
+use volcasm_core::wav::stream_to_wav_at;
 
 enum Spec {
     Sample {
@@ -133,8 +135,12 @@ fn read_pcm(path: &Path) -> Result<(Vec<i16>, u32), Box<dyn Error>> {
 
 fn run() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let [out, items @ ..] = args.as_slice() else {
-        return Err("usage: syro_wav <out.wav> <item>...".into());
+    let (rate, args) = match args.as_slice() {
+        [flag, rate, rest @ ..] if flag == "--rate" => (rate.parse::<u32>()?, rest),
+        rest => (STREAM_SAMPLE_RATE, rest),
+    };
+    let [out, items @ ..] = args else {
+        return Err("usage: syro_wav [--rate <hz>] <out.wav> <item>...".into());
     };
     if items.is_empty() {
         return Err("no items given".into());
@@ -144,12 +150,12 @@ fn run() -> Result<(), Box<dyn Error>> {
         .map(|arg| parse(arg))
         .collect::<Result<Vec<_>, _>>()?;
     let items: Vec<SyroItem<'_>> = specs.iter().map(Spec::item).collect();
-    let frames = encode(&items)?;
-    std::fs::write(out, stream_to_wav(&frames))?;
+    let frames = resample_stream(&encode(&items)?, rate)?;
+    std::fs::write(out, stream_to_wav_at(&frames, rate))?;
     println!(
-        "{out}: {} frames, {:.2} s at 44.1 kHz",
+        "{out}: {} frames, {:.2} s at {rate} Hz",
         frames.len(),
-        frames.len() as f64 / 44_100.0
+        frames.len() as f64 / f64::from(rate)
     );
     Ok(())
 }

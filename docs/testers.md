@@ -52,11 +52,11 @@ Connect the computer's headphone output to SYNC IN on the volca with a
 programs that play sound. During a transfer the volca shows the progress;
 `Err dcod` on the volca means the sound reached it altered (see below).
 
-## The audio output must run at 44.1 kHz
+## The audio output: 44.1 kHz recommended
 
-The transfer signal is modulated data: resampling, equalizers or volume
-levelling corrupt it. Volcasm checks the output before sending and refuses
-when it would be resampled.
+The transfer signal is modulated data: equalizers, volume levelling and
+low-quality resampling can corrupt it. Volcasm checks the output before
+sending.
 
 ### Linux
 
@@ -68,15 +68,21 @@ and, after the transfer, `pw-metadata -n settings 0 clock.force-rate 0`.
 
 ### Windows
 
+If the output runs at another rate (often 48000 Hz), Volcasm converts the
+stream to that rate itself and shows a warning. This should work, but it is
+not yet confirmed on Windows hardware: if the volca shows `Err dcod`, set
+the format to 44.1 kHz as in point 1 and try again.
+
 1. Settings → System → Sound → your output device (e.g. Speakers or
    Headphones) → Output settings → Format: **16 bit, 44100 Hz (CD Quality)**.
    In the older Control Panel: Sound → device → Properties → Advanced →
    Default Format.
 2. On the same page turn off **Audio enhancements** (and any "Loudness
-   Equalization", Dolby or vendor sound effects).
+   Equalization", Dolby or vendor sound effects) and **Spatial sound**
+   (Windows Sonic, Dolby Atmos).
 3. Set the device volume to 100%.
 
-Volcasm checks the format (point 1) but cannot see enhancements or the
+Volcasm sees the format (point 1) but cannot see enhancements or the
 volume, so please check points 2 and 3 yourself.
 
 ## Factory reset

@@ -62,12 +62,11 @@ fn instructions(ui: &mut Ui) {
     ui.add_space(6.0);
     diagram(ui);
     ui.add_space(6.0);
-    for line in [
-        "Set the computer volume to 100%.",
-        "Turn the volca on; it receives on its own (do not play it).",
-    ] {
-        ui.label(style::label(&format!("· {line}")));
-    }
+    ui.label(style::label(
+        "· Turn the volca on; it receives on its own (do not play it).",
+    ));
+    ui.add_space(8.0);
+    sound_settings(ui);
     ui.add_space(8.0);
     egui::Frame::new()
         .fill(style::ACCENT.gamma_multiply(0.15))
@@ -83,6 +82,33 @@ fn instructions(ui: &mut Ui) {
                 ))
                 .color(style::text()),
             );
+        });
+}
+
+/// Settings of the output that Volcasm cannot check: anything that alters
+/// the signal corrupts the transfer (Err dcod on the volca).
+fn sound_settings(ui: &mut Ui) {
+    let mut lines = vec!["Set the output volume to 100%, or as close to it as possible."];
+    if cfg!(windows) {
+        lines.push(
+            "Turn off sound effects (Audio enhancements, equalizer, loudness) for the \
+             output in Sound settings.",
+        );
+        lines.push("Turn off spatial sound (Windows Sonic, Dolby Atmos).");
+    } else {
+        lines.push("Turn off sound effects (equalizer, loudness, surround) for the output.");
+    }
+    egui::Frame::new()
+        .stroke(Stroke::new(1.0, style::text_dim()))
+        .corner_radius(4.0)
+        .inner_margin(8.0)
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(egui::RichText::new(style::caps("Before sending")).color(style::text()));
+            ui.add_space(2.0);
+            for line in lines {
+                ui.label(style::label(&format!("· {line}")));
+            }
         });
 }
 

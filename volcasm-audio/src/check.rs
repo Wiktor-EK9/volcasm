@@ -29,9 +29,14 @@ pub enum Problem {
     StreamFormat { rate: u32, channels: u32 },
     /// The stream or device is muted.
     Muted { node: String },
-    /// The shared-mode mix format of the device (Windows) is not 44.1 kHz:
-    /// the system would resample the stream.
-    MixRate { device: String, rate: u32 },
+    /// The shared-mode mix rate of the device (Windows) is not the rate the
+    /// stream was prepared for (it changed after the stream was opened): the
+    /// system would resample the stream.
+    MixRate {
+        device: String,
+        rate: u32,
+        expected: u32,
+    },
 }
 
 impl Problem {
@@ -78,11 +83,14 @@ impl fmt::Display for Problem {
                  {STREAM_RATE} Hz stereo"
             ),
             Self::Muted { node } => write!(f, "{node} is muted"),
-            Self::MixRate { device, rate } => write!(
+            Self::MixRate {
+                device,
+                rate,
+                expected,
+            } => write!(
                 f,
-                "{device} runs at {rate} Hz, not {STREAM_RATE} Hz; the system would \
-                 resample the stream. In Sound settings open the device, then set \
-                 Format (Advanced) to 16 bit, {STREAM_RATE} Hz"
+                "{device} switched to {rate} Hz, the stream was prepared for {expected} Hz; \
+                 the system would resample it. Try again"
             ),
         }
     }
@@ -98,6 +106,9 @@ pub enum Warning {
     SoftVolume { node: String, volumes: Vec<f32> },
     /// Device output level is below 100%.
     DeviceVolume { device: String, volumes: Vec<f32> },
+    /// The shared-mode mix rate of the device (Windows) is not 44.1 kHz:
+    /// Volcasm resampled the stream to it before sending.
+    MixResampled { device: String, rate: u32 },
 }
 
 impl fmt::Display for Warning {
@@ -125,20 +136,37 @@ impl fmt::Display for Warning {
                 "output volume of {device} is {} (100% recommended)",
                 percent(volumes)
             ),
+            Self::MixResampled { device, rate } => write!(
+                f,
+                "{device} runs at {rate} Hz: the stream was resampled from {STREAM_RATE} Hz. \
+                 If the volca shows Err dcod, open the device in Sound settings and set \
+                 Format (Advanced) to 16 bit, {STREAM_RATE} Hz"
+            ),
         }
     }
 }
 
 /// Checks a device whose stream goes through a shared mixer running at
-/// `mix_rate` (Windows): anything but 44.1 kHz would be resampled.
-pub fn verify_mix_rate(device: &str, mix_rate: u32) -> Result<Vec<Warning>, Problem> {
-    if mix_rate == STREAM_RATE {
-        Ok(Vec::new())
-    } else {
+/// `mix_rate` (Windows). The stream was prepared (resampled if needed) for
+/// `stream_rate`; any other mix rate would make the system resample it.
+pub fn verify_mix_rate(
+    device: &str,
+    mix_rate: u32,
+    stream_rate: u32,
+) -> Result<Vec<Warning>, Problem> {
+    if mix_rate != stream_rate {
         Err(Problem::MixRate {
             device: device.to_owned(),
             rate: mix_rate,
+            expected: stream_rate,
         })
+    } else if mix_rate != STREAM_RATE {
+        Ok(vec![Warning::MixResampled {
+            device: device.to_owned(),
+            rate: mix_rate,
+        }])
+    } else {
+        Ok(Vec::new())
     }
 }
 
@@ -405,12 +433,20 @@ mod tests {
 
     #[test]
     fn mix_rate() {
-        assert_eq!(verify_mix_rate("Speakers", 44_100), Ok(Vec::new()));
+        assert_eq!(verify_mix_rate("Speakers", 44_100, 44_100), Ok(Vec::new()));
         assert_eq!(
-            verify_mix_rate("Speakers", 48_000),
-            Err(Problem::MixRate {
+            verify_mix_rate("Speakers", 48_000, 48_000),
+            Ok(vec![Warning::MixResampled {
                 device: "Speakers".into(),
                 rate: 48_000
+            }])
+        );
+        assert_eq!(
+            verify_mix_rate("Speakers", 48_000, 44_100),
+            Err(Problem::MixRate {
+                device: "Speakers".into(),
+                rate: 48_000,
+                expected: 44_100
             })
         );
     }

@@ -4,6 +4,7 @@ description = "FFI bindings to KORG SYRO for volca sample (vendored SDK)"
 version.workspace = true
 edition.workspace = true
 # Vendored KORG SYRO SDK is BSD-3-Clause, see vendor/volcasample/COPYING.
+publish.workspace = true
 license = "GPL-3.0-or-later AND BSD-3-Clause"
 links = "syro_volcasample"
 

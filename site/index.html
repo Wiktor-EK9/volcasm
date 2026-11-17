@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>volcasm · the volca sample manager</title>
+<meta name="description" content="the volca sample manager">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#1c1d20">
+<meta property="og:title" content="volcasm">
+<meta property="og:description" content="the volca sample manager">
+<meta property="og:image" content="img/dark-01-samples.webp">
+<link rel="icon" href="img/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="img/icon.png">
+<link rel="preload" href="fonts/BarlowSemiCondensed-Medium.ttf" as="font" type="font/ttf" crossorigin>
+<link rel="preload" href="fonts/Overpass-Bold.ttf" as="font" type="font/ttf" crossorigin>
+<link rel="stylesheet" href="style.css">
+<script>
+  // Theme before first paint: saved choice, else follow the system.
+  try { const t = localStorage.getItem("theme"); if (t === "dark" || t === "light") document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <div class="wrap">
+    <a class="logo brand" href="#top"><img src="img/icon.png" alt="" width="34" height="34">volcasm</a>
+    <nav class="nav" aria-label="Sections">
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="#download">Download</a>
+      <a href="#faq">FAQ</a>
+      <a href="https://github.com/Wiktor-EK9/volcasm"><span class="i" aria-hidden="true">&#xE576;</span> GitHub</a>
+    </nav>
+    <div class="themes" role="group" aria-label="Theme">
+      <button class="toggle" data-theme-choice="dark" aria-pressed="false" title="Dark theme" aria-label="Dark theme">&#xE330;</button>
+      <button class="toggle" data-theme-choice="light" aria-pressed="false" title="Light theme" aria-label="Light theme">&#xE472;</button>
+      <button class="toggle" data-theme-choice="system" aria-pressed="false" title="Follow the system" aria-label="Follow the system">&#xE32E;</button>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+<section class="hero" id="top">
+  <div class="wrap">
+    <div class="hero__grid">
+    <div>
+    <p class="wordmark brand">volcasm</p>
+    <h1 class="hero__sub">the volca sample manager</h1>
+    <p class="lede prose">Manage all 100 sample slots and 10 sequences on your computer, then send them to the volca sample through the headphone output. No extra hardware: one 3.5&nbsp;mm cable to SYNC IN.</p>
+    <div class="cta">
+      <a class="btn btn--primary btn--big" href="#download"><span class="i" aria-hidden="true">&#xE20C;</span> Download</a>
+      <a class="btn btn--big" href="https://github.com/Wiktor-EK9/volcasm"><span class="i" aria-hidden="true">&#xE576;</span> Source code</a>
+    </div>
+    <p class="meta">Version 0.1.1 · test builds · open source, <span style="white-space:nowrap">GPL-3.0-or-later</span></p>
+    </div>
+    <canvas class="hero__anim" id="hero-anim" width="560" height="520" role="img" aria-label="Animation: a breakbeat is recorded into slot 1, copied to slots 2 to 4, each copy is trimmed to a different section and sent off as seven-segment data."></canvas>
+    </div>
+
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <h2 class="title">features</h2>
+    <div class="features">
+      <article class="feature"><h3><span class="i" aria-hidden="true">&#xE802;</span> 100-slot sample library</h3><p>Drag in WAV, AIFF, FLAC, MP3, OGG or M4A. Files are converted to the volca format: 31.25 kHz, 16-bit mono.</p></article>
+      <article class="feature"><h3><span class="i" aria-hidden="true">&#xEA20;</span> Waveform editor</h3><p>Start and length handles, trim, normalize, pitch, replace, export and undo.</p></article>
+      <article class="feature"><h3><span class="i" aria-hidden="true">&#xE9C4;</span> Memory budget</h3><p>Live duration and memory meters, measured on the hardware: about 66.8 s, 1019 blocks, 4 MB.</p></article>
+      <article class="feature"><h3><span class="i" aria-hidden="true">&#xECBE;</span> Sequence editor</h3><p>10 sequences × 10 parts × 16 steps. Part flags, every parameter on a knob, motion data per step, active steps.</p></article>
+      <article class="feature"><h3><span class="i" aria-hidden="true">&#xE3D0;</span> Preview on the computer</h3><p>Play a sequence at any tempo before you send it. An approximation of the volca's own engine.</p></article>
+      <article class="feature"><h3><span class="i" aria-hidden="true">&#xE398;</span> Transfer over audio</h3><p>KORG's SYRO encoding for selected slots and sequences. 16-bit lossless, or down to 8-bit for about twice the speed.</p></article>
+      <article class="feature"><h3><span class="i" aria-hidden="true">&#xE326;</span> Sampler</h3><p>Record from any audio input straight into a slot, with silence trimmed off.</p></article>
+      <article class="feature"><h3><span class="i" aria-hidden="true">&#xE760;</span> Factory reset</h3><p>Restore the KORG factory samples, or erase every sample on the volca.</p></article>
+      <article class="feature"><h3><span class="i" aria-hidden="true">&#xE256;</span> Vosyr import</h3><p>Open Vosyr <code>.vsj</code> projects: samples, sequences, tempo, swing and reverb.</p></article>
+    </div>
+  </div>
+</section>
+
+<section id="samples">
+  <div class="wrap split split--mock">
+    <div>
+      <h2 class="title">samples</h2>
+      <ul class="list">
+        <li><span class="i" aria-hidden="true">&#xE182;</span><span>All 100 slots on one screen, with names and lengths</span></li>
+        <li><span class="i" aria-hidden="true">&#xE182;</span><span>Drag in WAV, AIFF, FLAC, MP3, OGG or M4A</span></li>
+        <li><span class="i" aria-hidden="true">&#xE182;</span><span>Trim, normalize and pitch on the waveform</span></li>
+        <li><span class="i" aria-hidden="true">&#xE182;</span><span>Record straight into a slot</span></li>
+        <li><span class="i" aria-hidden="true">&#xE182;</span><span>Check the slots you want and send only those</span></li>
+      </ul>
+    </div>
+    <div class="mock" style="margin-top:0" role="img" aria-label="The samples view of Volcasm: a 10 by 10 grid of sample slots, 24 of them filled with drum and bass samples, and a side panel with the selected sample's waveform and the SEND button.">
+      <div class="mk-body" aria-hidden="true">
+        <div class="mk-slots" id="mk-slots"></div>
+        <div class="mk-side">
+          <p class="mk-title brand">slot 23</p>
+          <p class="mk-cap">NAME</p>
+          <p class="mk-field">breakbeat</p>
+          <p class="mk-cap"><span class="i">&#xE802;</span> WAVEFORM</p>
+          <svg class="mk-wave" id="mk-wave" viewBox="0 0 240 64" preserveAspectRatio="none"></svg>
+          <dl class="mk-read"><dt>START</dt><dd>0.000 S</dd><dt>END</dt><dd>2.759 S</dd><dt>LENGTH</dt><dd>2.759 S</dd><dt>MEMORY</dt><dd>43 BLK</dd></dl>
+          <p class="mk-cap">EDIT</p>
+          <p class="mk-btns"><span class="mk-btn">TRIM</span><span class="mk-btn">NORMALIZE</span><span class="mk-btn">REPLACE</span></p>
+          <p class="mk-title brand">transfer</p>
+          <p class="mk-small">24 CHECKED · QUALITY 16 BIT · LOSSLESS</p>
+          <p class="mk-send"><span class="i">&#xE398;</span> SEND 24 ITEMS</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="sequences">
+  <div class="wrap split split--mock">
+    <div>
+      <h2 class="title">sequences</h2>
+      <ul class="list">
+        <li><span class="i" aria-hidden="true">&#xE182;</span><span>MOTION, LOOP, REVERB, REVERSE and MUTE per part</span></li>
+        <li><span class="i" aria-hidden="true">&#xE182;</span><span>Level, pan, speed, start point, length, envelopes, hi cut</span></li>
+        <li><span class="i" aria-hidden="true">&#xE182;</span><span>Motion data drawn step by step</span></li>
+        <li><span class="i" aria-hidden="true">&#xE182;</span><span>Copy, paste and undo for whole sequences</span></li>
+      </ul>
+    </div>
+    <div class="mock" style="margin-top:0" role="img" aria-label="The sequences view of Volcasm: part 1 expanded with eleven parameter knobs above a row of 16 steps, parts 2 to 4 below, and a side panel with the sequence selector, PLAY, a 125 BPM display and the active steps.">
+      <div class="mk-body" aria-hidden="true">
+        <div class="mk-parts" id="mk-parts"></div>
+        <div class="mk-side">
+          <p class="mk-title brand">sequence 1</p>
+          <p class="mk-seqs"><span class="is-on">1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span></p>
+          <p class="mk-btns"><span class="mk-btn"><span class="i">&#xE1CA;</span> COPY</span><span class="mk-btn">PASTE</span><span class="mk-btn"><span class="i">&#xE4A6;</span> CLEAR</span><span class="mk-btn"><span class="i">&#xE08A;</span> UNDO</span></p>
+          <p class="mk-cap"><span class="i">&#xE3D0;</span> PREVIEW</p>
+          <p class="mk-preview"><span class="mk-btn mk-btn--big"><span class="i">&#xE3D0;</span> PLAY</span><span class="mk-led"><span class="g">888</span><span class="v">125</span></span><span>BPM</span></p>
+          <p class="mk-cap"><span class="i">&#xECBE;</span> ACTIVE STEP</p>
+          <p class="mk-steps mk-steps--active" id="mk-active"></p>
+          <p class="mk-title brand">transfer</p>
+          <p class="mk-small">SEQUENCES 1 · 4 · QUALITY 16 BIT · LOSSLESS</p>
+          <p class="mk-send"><span class="i">&#xE398;</span> SEND 2 ITEMS</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap how">
+    <div>
+      <h2 class="title">how it works</h2>
+      <ol class="steps-list">
+        <li><span class="led led--sm" aria-hidden="true"><span class="led__ghost">8</span><span class="led__value">1</span></span><div><h3>Build</h3><p>Load samples and build sequences in Volcasm.</p></div></li>
+        <li><span class="led led--sm" aria-hidden="true"><span class="led__ghost">8</span><span class="led__value">2</span></span><div><h3>Connect</h3><p>Run a 3.5 mm cable from the computer's headphone jack to SYNC IN on the volca. Volume at 100 %.</p></div></li>
+        <li><span class="led led--sm" aria-hidden="true"><span class="led__ghost">8</span><span class="led__value">3</span></span><div><h3>Send</h3><p>Press SEND. The volca shows the progress on its own display.</p></div></li>
+      </ol>
+      <div class="notice"><span class="i" aria-hidden="true">&#xE4E0;</span><span>The transfer is a loud, harsh noise. Never play it through speakers or headphones.</span></div>
+    </div>
+    <svg class="diagram" viewBox="0 0 480 300" role="img" aria-label="Line drawing: the computer's audio output connected by a red cable to the SYNC IN jack of the volca sample">
+      <!-- laptop, top right -->
+      <rect class="line" x="300" y="20" width="150" height="96" rx="4"/>
+      <path class="line" d="M282 136 H468 L450 116 H300 Z"/>
+      <circle class="hot-fill" cx="290" cy="128" r="4"/>
+      <text class="lbl" x="280" y="114" text-anchor="end">AUDIO OUT</text>
+      <!-- volca panel, bottom left -->
+      <rect class="line" x="10" y="190" width="280" height="96" rx="4"/>
+      <text class="name" x="278" y="276" text-anchor="end">volca sample</text>
+      <g>
+        <circle class="jack" cx="48" cy="218" r="10"/><text class="lbl" x="48" y="248" text-anchor="middle">MIDI IN</text>
+        <circle class="jack hot" cx="116" cy="218" r="10"/><circle class="hot-fill" cx="116" cy="218" r="5"/><text class="lbl hot" x="116" y="248" text-anchor="middle">SYNC IN</text>
+        <circle class="jack" cx="184" cy="218" r="10"/><text class="lbl" x="184" y="248" text-anchor="middle">SYNC OUT</text>
+        <circle class="jack" cx="252" cy="218" r="10"/><text class="lbl" x="252" y="248" text-anchor="middle">PHONES</text>
+      </g>
+      <path class="cable" d="M290 128 C180 140 128 60 116 218"/>
+    </svg>
+  </div>
+</section>
+
+<section id="download">
+  <div class="wrap">
+    <h2 class="title">download</h2>
+    <div class="platforms">
+      <article class="platform">
+        <h3><span class="i" aria-hidden="true">&#xEB02;</span> Linux</h3>
+        <a class="btn btn--primary" href="https://github.com/Wiktor-EK9/volcasm/releases/latest"><span class="i" aria-hidden="true">&#xE20C;</span> AppImage</a>
+      </article>
+      <article class="platform">
+        <h3><span class="i" aria-hidden="true">&#xE692;</span> Windows</h3>
+        <a class="btn btn--primary" href="https://github.com/Wiktor-EK9/volcasm/releases/latest"><span class="i" aria-hidden="true">&#xE20C;</span> Zip</a>
+      </article>
+      <article class="platform">
+        <h3><span class="i" aria-hidden="true">&#xE516;</span> macOS <span class="tag tag--warn">Untested</span></h3>
+        <a class="btn" href="https://github.com/Wiktor-EK9/volcasm/releases/latest"><span class="i" aria-hidden="true">&#xE20C;</span> App bundle</a>
+      </article>
+    </div>
+    <p class="after prose">Each release lists SHA-256 sums. Prefer to build it yourself? The source and build steps are on <a href="https://github.com/Wiktor-EK9/volcasm">GitHub</a>.</p>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <h2 class="title">good to know</h2>
+    <div class="faq">
+      <details><summary>Can Volcasm read samples back from the volca?</summary><p>No. The volca sample cannot send data: SYNC OUT is only a clock pulse. Your project file is the backup, so save it.</p></details>
+      <details><summary>Which volca does it support?</summary><p>Only the first-generation KORG volca sample: 100 slots, 10 sequences, about 4 MB. The volca sample2 is not supported.</p></details>
+      <details><summary>The volca shows Err dcod. What now?</summary><p>Something on the audio path changed the signal. Set the output to 16-bit, 44.1 kHz, turn off equalizers and audio "enhancements", and set the volume to 100 %. Volcasm checks the output rate and refuses to send when the signal would be resampled.</p></details>
+      <details><summary>Do I need an interface or a special cable?</summary><p>No. A plain 3.5 mm stereo or mono cable from the headphone jack to SYNC IN is enough.</p></details>
+      <details><summary>Is it safe to listen to the transfer?</summary><p>No. The signal is a loud, harsh noise. Never route it to speakers or headphones.</p></details>
+      <details><summary>Is it related to KORG?</summary><p>No. Volcasm is an independent open-source project, not affiliated with or endorsed by KORG Inc. It uses the SYRO library that KORG published for this purpose.</p></details>
+    </div>
+  </div>
+</section>
+<section id="inspired">
+  <div class="wrap">
+    <h2 class="title">inspired by the best</h2>
+    <div class="tribute">
+      <article class="tribute__card">
+        <h3 class="brand">vosyr</h3>
+        <p class="tribute__by">By Frederikson Labs · Windows and macOS</p>
+        <p>The best volca sample manager ever made. Volcasm exists mainly because Vosyr can no longer be downloaded anywhere and never had a Linux version. Volcasm opens Vosyr projects, so your old work comes along.</p>
+        <a class="btn" href="http://www.frederikson-labs.com/"><span class="i" aria-hidden="true">&#xE5DE;</span> Frederikson Labs</a>
+      </article>
+      <article class="tribute__card">
+        <h3 class="brand">volca sampler</h3>
+        <p class="tribute__by">By Ben Wiley · open source, MIT</p>
+        <p>Web-based: record a sample and send it to the volca right from the browser, including on your phone, which Volcasm can't do. Its approach to sample processing and to testing SYRO streams helped shape Volcasm.</p>
+        <a class="btn" href="https://github.com/benwiley4000/volca-sampler"><span class="i" aria-hidden="true">&#xE576;</span> Volca Sampler on GitHub</a>
+      </article>
+    </div>
+    <p class="after">Thank you to both. Volcasm would not exist without them.</p>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <a class="logo brand" href="#top" style="font-size:24px"><img src="img/icon.png" alt="" width="28" height="28" style="width:28px;height:28px">volcasm</a>
+    <div class="links">
+      <a href="https://github.com/Wiktor-EK9/volcasm"><span class="i" aria-hidden="true">&#xE576;</span> GitHub</a>
+      <a href="https://github.com/Wiktor-EK9/volcasm/releases"><span class="i" aria-hidden="true">&#xE20C;</span> Releases</a>
+      <a href="https://github.com/Wiktor-EK9/volcasm/issues"><span class="i" aria-hidden="true">&#xE5DE;</span> Report a problem</a>
+    </div>
+    <p>By Wiktor-EK9. Licensed under <a href="https://github.com/Wiktor-EK9/volcasm/blob/main/LICENSE">GPL-3.0-or-later</a>. Fonts: Overpass (<a href="fonts/OFL-Overpass.txt">SIL OFL 1.1</a>), Barlow (<a href="fonts/OFL-Barlow.txt">SIL OFL 1.1</a>) and DSEG (<a href="fonts/OFL-DSEG.txt">SIL OFL 1.1</a>); icons: Phosphor (<a href="fonts/LICENSE-Phosphor-MIT.txt">MIT</a>).</p>
+    <p>KORG and volca are trademarks of KORG Inc. Volcasm is an independent project, not affiliated with KORG.</p>
+  </div>
+</footer>
+
+<script>
+(() => {
+  // Theme buttons: dark, light, or follow the system.
+  const root = document.documentElement;
+  const buttons = document.querySelectorAll("[data-theme-choice]");
+  const show = () => {
+    const current = root.dataset.theme || "system";
+    buttons.forEach(b => b.setAttribute("aria-pressed", String(b.dataset.themeChoice === current)));
+  };
+  buttons.forEach(b => b.addEventListener("click", () => {
+    const choice = b.dataset.themeChoice;
+    if (choice === "system") delete root.dataset.theme; else root.dataset.theme = choice;
+    try { choice === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", choice); } catch (e) {}
+    show();
+  }));
+  show();
+
+  // App mockup in the hero: slot grid, meters and waveform of the samples view.
+  const kit = [["kick_01",.42],["kick_02",.38],["snare_01",.51],["snare_02",.47],["clap",.33],["hat_closed",.12],["hat_open",.41],["ride",1.62],["crash",2.1],["tom_low",.58],["tom_mid",.49],["tom_high",.44],["rim",.09],["shaker",.27],["cowbell",.36],["perc_01",.31],["bass_c1",1.25],["bass_e1",1.25],["bass_g1",1.25],["pad_am",4.8],["stab_01",.88],["vox_hey",.62],["fx_rise",3.4],["breakbeat",2.76]];
+  const slotsEl = document.getElementById("mk-slots");
+  if (slotsEl) {
+    let html = "";
+    for (let i = 0; i < 100; i++) {
+      const k = kit[i];
+      html += k
+        ? `<div class="mk-slot is-full${i === 23 ? " is-sel" : ""}"><span class="mk-n">${i}</span><span class="mk-d">${k[1].toFixed(2)}S</span><span class="mk-name">${k[0]}</span><span class="mk-box${i % 3 ? " is-on" : ""}"></span><span class="mk-play"></span></div>`
+        : `<div class="mk-slot"><span class="mk-n">${i}</span><span class="mk-box"></span></div>`;
+    }
+    slotsEl.innerHTML = html;
+    // waveform as in the app: 3 px bars on a 4 px pitch, red start/end handles
+    let r = 5; const n = () => ((r = (r * 48271) % 2147483647) / 2147483647);
+    const hits = [[0, .8], [2, .72], [4, 1], [7, .5], [9, .55], [10, .74], [11, .68], [13, .98]];
+    let bars = "";
+    for (let i = 0; i < 60; i++) {
+      const x = i / 60 * 16; let a = 0.2 + 0.1 * (n() - 0.5);
+      for (const [st, pk] of hits) if (x >= st) a = Math.max(a, pk * Math.exp(-(x - st) * 1.4) * (0.85 + 0.15 * n()));
+      const h = Math.max(1.5, Math.min(30, Math.ceil(a * 30 / 3) * 3));
+      bars += `<rect class="b" x="${i * 4}" y="${32 - h}" width="3" height="${h * 2}"/>`;
+    }
+    document.getElementById("mk-wave").innerHTML = bars + '<rect class="m" x="0" y="31.5" width="240" height="1"/><rect class="h" x="0" y="0" width="2" height="64"/><rect class="h" x="0" y="0" width="7" height="7"/><rect class="h" x="238" y="0" width="2" height="64"/><rect class="h" x="233" y="0" width="7" height="7"/>';
+  }
+
+  // Sequences mockup: parts with 16 steps, part 1 expanded with its knobs.
+  const stepRow = (on, inactive = []) => on.map((v, i) => `<span class="${v ? (inactive.includes(i) ? "is-dim" : "is-on") : ""}">${i + 1}</span>`).join("");
+  const bits = p => p.split("").map(c => c === "x");
+  const partsEl = document.getElementById("mk-parts");
+  if (partsEl) {
+    const parts = [
+      ["0 kick_01", "...x..xx.xx.xx..", [0]],
+      ["5 hat_closed", ".xx...xxxx.xxx.x"],
+      ["2 snare_01", "xx.xx...xxxx.xx."],
+      ["23 breakbeat", "x..x..xx....x..x"],
+    ];
+    const off = [12]; // step 13 is outside ACTIVE STEP
+    partsEl.innerHTML = parts.map(([sample, pat], i) => `<div class="mk-part">
+      <div class="mk-row"><span class="mk-p brand">p${i + 1}</span><span class="mk-combo">${sample}</span><span class="mk-t">MOTION</span><span class="mk-t">LOOP</span></div>
+      <div class="mk-row"><span class="mk-t">REVERB</span><span class="mk-t">REVERSE</span><span class="mk-t">MUTE</span><span class="mk-t">SOLO</span><span class="mk-t${i === 0 ? " is-on" : ""}">PARAMS</span><span class="mk-t">MOTION EDIT</span></div>
+      <p class="mk-steps">${stepRow(bits(pat), off)}</p>${i === 0 ? '<div class="mk-knobs" id="mk-knobs"></div>' : ""}</div>`).join("");
+    document.getElementById("mk-active").innerHTML = stepRow(Array.from({ length: 16 }, (_, i) => !off.includes(i)));
+
+    // Knobs: 270-degree track, value arc from the start (or from 12 o'clock
+    // for bipolar parameters), as drawn in the app (knob.rs).
+    const knobs = [["Level",127,0,127],["Pan",0,-63,63,1],["Speed",0,-63,63,1],["Start point",75,0,127],["Length",127,0,127],["Amp EG attack",0,0,127],["Amp EG decay",31,0,127],["Pitch EG int",-38,-63,63,1],["Pitch EG attack",0,0,127],["Pitch EG decay",28,0,127],["Hi cut",64,0,127]];
+    const S = 0.75 * Math.PI, R = 17, cx = 39, cy = 30;
+    const pt = (a, r) => [cx + r * Math.sin(a), cy - r * Math.cos(a)];
+    const arc = (a, b) => { const [x1, y1] = pt(a, R), [x2, y2] = pt(b, R); return `M${x1.toFixed(2)} ${y1.toFixed(2)}A${R} ${R} 0 ${b - a > Math.PI ? 1 : 0} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`; };
+    const host = document.getElementById("mk-knobs");
+    for (const [name, v, min, max, bipolar] of knobs) {
+      const ang = -S + 2 * S * (v - min) / (max - min);
+      const start = bipolar ? 0 : -S;
+      const [a, b] = start <= ang ? [start, ang] : [ang, start];
+      const [t1x, t1y] = pt(ang, R - 9), [t2x, t2y] = pt(ang, R + 1);
+      host.insertAdjacentHTML("beforeend",
+        `<div class="knob"><span class="knob__label">${name}</span><svg width="78" height="54" viewBox="0 0 78 54">` +
+        `<path class="knob__track" d="${arc(-S, S)}"/>` + (b > a ? `<path class="knob__arc" d="${arc(a, b)}"/>` : "") +
+        `<line class="knob__tick" x1="${t1x}" y1="${t1y}" x2="${t2x}" y2="${t2y}"/>` +
+        `<text class="knob__value" x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central">${v}</text></svg></div>`);
+    }
+  }
+})();
+</script>
+<script src="hero-anim.js" defer></script>
+</body>
+</html>

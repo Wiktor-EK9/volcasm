@@ -36,8 +36,8 @@ Website: <https://volcasm.wmachalica.pl>
   (`.vsj`) can be imported.
 - **Updates:** optional check for a new version at start.
 
-The volca cannot send anything back to the computer: its samples and
-sequences cannot be read out. Keep your project file as the backup.
+*The volca cannot send anything back to the computer: its samples and
+sequences cannot be read out. Keep your project file as the backup.*
 
 ## Download
 
@@ -72,7 +72,7 @@ Get the latest build from
 5. Press send in Volcasm. The volca shows the progress.
 
 `Err dcod` on the volca means the signal arrived altered: check the points
-above, make sure that any additional sound effects such as surround sound are turned off on your computer. 
+above and **make sure that any additional sound effects or enhancements such as surround sound are turned off on your computer.** 
 More details for testers are in [docs/testers.md](docs/testers.md).
 
 ## Building from source

@@ -13,10 +13,9 @@
 Sample and sequence manager for the first generation KORG Volca Sample, built in Rust.
 Volcasm keeps a library of 100 sample slots and 10 sequences on your computer, lets you edit them, and send your sample pack to the volca through the computer's audio output into the volca's SYNC IN jack.
 
-Linux, Windows and macOS (UNTESTED). 
-Free software under the GPL-3.0-or-later license.
+Linux, Windows and macOS *(UNTESTED)*. 
 
-Website: <https://volcasm.wmachalica.pl>
+Free software under the GPL-3.0-or-later license.
 
 ## Features
 
@@ -46,13 +45,16 @@ Get the latest build from
 
 - **Linux:** `volcasm-*-x86_64.AppImage`.
 - Needs PipeWire and glibc 2.39
-  or newer (Ubuntu 24.04, Debian 13, Fedora 40 or newer). If it does not
-  start, install `libfuse2` (or `fuse2`).
+  or newer (Ubuntu 24.04, Debian 13, Fedora 40 or newer).
+  If it does not start, install `libfuse2` (or `fuse2`).
+  
 - **Windows 10/11 (64-bit):** unpack the zip and run `volcasm.exe`.
+- 
 - **macOS 11 or newer:** unpack the zip and move `Volcasm.app` to
   Applications. The app is not signed by Apple: right-click → Open → Open
   on the first start.
-  The macOS version has not been tested yet. Feel free to try it and let me know how it goes!
+  
+  *The macOS version has not been tested yet. Feel free to try it and let me know how it goes!*
 
 ## Sending to the volca
 

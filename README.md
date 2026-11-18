@@ -13,8 +13,7 @@ Free software under the GPL-3.0-or-later license.
 [![Written in Rust](https://img.shields.io/badge/Written%20in-Rust-red?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
 [![Runs on Linux · Windows · Macos](https://img.shields.io/badge/Runs%20on-Linux%20%C2%B7%20Windows%20%C2%B7%20Macos%20(untested)-red?style=for-the-badge&logo=linux&logoColor=white)](https://github.com/Wiktor-EK9/volcasm)
 [![License GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-red?style=for-the-badge)](LICENSE)
-![](https://img.shields.io/badge/Website-wiktor--ek9.github.io%2Fvolcasm%2F-red?style=for-the-badge&logo=githubpages&logoColor=white)
-
+![](https://img.shields.io/badge/Website-wiktor--ek9.github.io%2Fvolcasm%2F-red?style=for-the-badge&logo=githubpages&logoColor=white&link=https%3A%2F%2Fwiktor-ek9.github.io%2Fvolcasm%2F)
 </div>
 
 ---

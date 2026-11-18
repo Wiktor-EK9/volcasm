@@ -13,7 +13,7 @@ Free software under the GPL-3.0-or-later license.
 [![Written in Rust](https://img.shields.io/badge/Written%20in-Rust-red?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
 [![Runs on Linux · Windows · Macos](https://img.shields.io/badge/Runs%20on-Linux%20%C2%B7%20Windows%20%C2%B7%20Macos%20(untested)-red?style=for-the-badge&logo=linux&logoColor=white)](https://github.com/Wiktor-EK9/volcasm)
 [![License GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-red?style=for-the-badge)](LICENSE)
-![](https://img.shields.io/badge/Website-wiktor--ek9.github.io%2Fvolcasm%2F-red?style=for-the-badge&logo=githubpages&logoColor=white&link=https%3A%2F%2Fwiktor-ek9.github.io%2Fvolcasm%2F)
+[![Website](https://img.shields.io/badge/Website-wiktor--ek9.github.io%2Fvolcasm%2F-red?style=for-the-badge&logo=githubpages&logoColor=white)](https://wiktor-ek9.github.io/volcasm/)
 </div>
 
 ---
@@ -49,6 +49,14 @@ Get the latest build from
   If it does not start, install `libfuse2` (or `fuse2`).
   
 - **Windows 10/11 (64-bit):** unpack the zip and run `volcasm.exe`.
+  The program is not signed yet, so Windows may stop it on the first start:
+  - **SmartScreen** ("Windows protected your PC"): click **More info** →
+    **Run anyway**.
+  - **Smart App Control** (Windows 11) blocks unsigned programs with no
+    option to run them. To start Volcasm, turn it off in Windows Security →
+    App & browser control → Smart App Control settings → **Off**. On some
+    Windows versions it cannot be turned back on without reinstalling
+    Windows.
   
 - **macOS 11 or newer:** unpack the zip and move `Volcasm.app` to
   Applications. The app is not signed by Apple: right-click → Open → Open

@@ -1,4 +1,4 @@
-//! Update check: asks GitHub for the latest release of Volcasm (D25). One
+//! Update check: asks GitHub for the latest release of Volcasm. One
 //! request, nothing about the user is sent besides what HTTPS needs and the
 //! program version in the User-Agent. Where the program can replace itself
 //! (an AppImage, the Windows `.exe`), it also downloads and installs the

@@ -2,8 +2,7 @@
 //! rendered offline or in real time. Deterministic and free of I/O.
 //!
 //! The device's sound engine is not documented, so this is a preview, not
-//! an emulation; the assumptions live in [`model`] (`docs/hardware.md`,
-//! section 4).
+//! an emulation; the assumptions live in [`model`].
 
 mod dsp;
 pub mod model;
@@ -248,7 +247,7 @@ impl Sequencer {
             .round() as usize)
             .clamp(1, rest);
 
-        // SPEED motion is not used: its encoding is unconfirmed (D19).
+        // SPEED motion is not used: its encoding is unconfirmed.
         let speed = match part.speed() {
             Speed::Semitones(n) => f64::from(n),
             Speed::Continuous(v) => f64::from(v) * model::CONTINUOUS_SPEED_SEMITONES_PER_UNIT,

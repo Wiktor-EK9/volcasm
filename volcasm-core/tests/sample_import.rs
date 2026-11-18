@@ -170,7 +170,7 @@ fn ogg_vorbis_is_imported() {
 fn device_format_wav_passes_through_bit_exact() {
     for path in [
         synthetic("sine_31250_mono_s16.wav"),
-        // Own recording from Test2 (D12).
+        // Own recording from Test2.
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../tests/fixtures/vosyr/Test2/samples/sample1791833706583"),
     ] {

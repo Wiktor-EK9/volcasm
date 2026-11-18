@@ -1,6 +1,6 @@
 //! Loader tests on the Vosyr projects in `tests/fixtures/vosyr`. Expected
-//! values come from the Vosyr screenshots and test notes stored next to the
-//! projects (`docs/vsj-format.md`).
+//! values come from Vosyr screenshots and notes taken while the projects
+//! were made.
 
 use std::path::{Path, PathBuf};
 
@@ -99,7 +99,7 @@ fn test1_s1_sample_numbers_match_screenshot() {
     assert_eq!(samples, [0, 8, 16, 7, 16, 12, 19, 24, 14, 1]);
 }
 
-/// Needs the Test1 sample files, which are not in the repository (D12).
+/// Needs the Test1 sample files, which are not in the repository.
 #[test]
 #[ignore = "needs the third-party Test1 samples on disk"]
 fn test1_total_duration_matches_ui() {
@@ -111,7 +111,7 @@ fn test1_total_duration_matches_ui() {
         .sum();
     // Frame count measured independently with Python's `wave` module:
     // 57.5049 s. Vosyr shows "DURATION: 57.51S", consistent with rounding
-    // up (hypothesis, docs/vsj-format.md section 2).
+    // up (hypothesis).
     assert_eq!(frames, 1_797_029);
     let centiseconds = (frames as f64 / 31_250.0 * 100.0).ceil();
     assert_eq!(centiseconds, 5751.0);
@@ -377,8 +377,8 @@ mod settings {
 
     use super::*;
 
-    /// (project, tempo, swing, reverb, shown sequence) from the test notes
-    /// (`Testy B.txt`, `Test4/Zmiany.txt`) and screenshots.
+    /// (project, tempo, swing, reverb, shown sequence) from notes taken while
+    /// the projects were made, and screenshots.
     const EXPECTED: [(&str, u8, u8, u8, u8); 25] = [
         ("Test1/Test1.vsj", 125, 14, 45, 3),
         ("Test2/Test2.vsj", 125, 0, 0, 0),

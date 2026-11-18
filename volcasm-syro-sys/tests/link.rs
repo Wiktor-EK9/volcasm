@@ -1,5 +1,6 @@
 //! Smoke test: the vendored SYRO library links and produces a stream.
-//! Bit-exact comparison with the SDK example is done in stage 2.
+//! Bit-exact comparison with the SDK example is in volcasm-core's
+//! `syro_reference` tests.
 
 use std::ptr;
 use volcasm_syro_sys::*;

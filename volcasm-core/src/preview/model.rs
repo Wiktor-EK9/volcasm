@@ -1,19 +1,18 @@
 //! How knob values map to sound in the preview. The volca sample's engine
 //! is not documented; everything here is an assumption unless marked
-//! confirmed (`docs/hardware.md`, section 4). Calibration changes only this
-//! file.
+//! confirmed on hardware. Calibration changes only this file.
 
 /// Steps per beat: the 16 steps are sixteenth notes. Certain.
 pub const STEPS_PER_BEAT: f64 = 4.0;
 
 /// Playback rate factor for SPEED in semitones. Confirmed: +12 is an
-/// octave (hardware test `t3_speed`).
+/// octave (hardware test).
 pub fn semitone_ratio(semitones: f64) -> f64 {
     2f64.powf(semitones / 12.0)
 }
 
 /// Semitones per unit of continuous SPEED. HYPOTHESIS: the full range
-/// ±63 spans ±1 octave (in `t3_speed`, continuous +12 sounded only a little
+/// ±63 spans ±1 octave (in the hardware test, continuous +12 sounded only a little
 /// higher).
 pub const CONTINUOUS_SPEED_SEMITONES_PER_UNIT: f64 = 12.0 / 63.0;
 

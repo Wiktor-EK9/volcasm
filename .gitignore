@@ -9,3 +9,5 @@ docs/ui/
 # Development notes kept locally, not published.
 /CLAUDE.md
 /DECISIONS.md
+/docs/hardware.md
+/docs/vsj-format.md

@@ -10,8 +10,8 @@ use volcasm_core::pattern::{MotionRow, PARTS, Pattern};
 use volcasm_core::project::{Project, Slot, Target, file};
 use volcasm_core::sample::{Sample, edit};
 
-/// Samples are always sent compressed to 16 bits: lossless
-/// (`docs/hardware.md`, section 2) and a shorter stream.
+/// Samples are always sent compressed to 16 bits: lossless (checked on
+/// hardware) and a shorter stream.
 pub const TRANSFER_BITS: u32 = 16;
 
 /// Name of a new project.

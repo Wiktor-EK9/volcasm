@@ -1,9 +1,9 @@
-//! Read-only loader for Vosyr `.vsj` projects (clean-room, D9).
+//! Read-only loader for Vosyr `.vsj` projects (clean-room).
 //!
 //! A project is a directory: `<name>.vsj`, `samples/samples` (slot index),
 //! `samples/sample<number>` (WAV files) and `sequences/sequence01..10` (raw
-//! SDK pattern structures). Only fields confirmed in `docs/vsj-format.md`
-//! are interpreted; everything else is kept byte for byte. From the `.vsj`
+//! SDK pattern structures). Only fields confirmed by test projects are
+//! interpreted; everything else is kept byte for byte. From the `.vsj`
 //! file only the global settings are read ([`settings`]); the file is kept
 //! raw.
 

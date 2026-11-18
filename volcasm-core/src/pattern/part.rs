@@ -1,5 +1,5 @@
 //! One part (track) of a pattern: sample, steps, function flags, knob
-//! parameters and motion data. Encodings in `docs/vsj-format.md`, section 4.
+//! parameters and motion data.
 
 use std::fmt;
 

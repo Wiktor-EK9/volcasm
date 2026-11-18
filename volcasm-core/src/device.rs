@@ -1,5 +1,5 @@
 //! Device profiles: hardware limits kept in one place, so the data model and
-//! file format do not hard-code them (D13).
+//! file format do not hard-code them.
 
 use std::fmt;
 
@@ -49,7 +49,7 @@ impl DeviceProfile {
 
 /// KORG volca sample (first generation).
 ///
-/// Memory capacity was measured on hardware (`docs/hardware.md`): 1019
+/// Memory capacity was measured on hardware: 1019
 /// blocks of 4096 B fit, the 1020th is uncertain.
 pub const VOLCA_SAMPLE: DeviceProfile = DeviceProfile {
     id: "volca-sample",
@@ -61,7 +61,7 @@ pub const VOLCA_SAMPLE: DeviceProfile = DeviceProfile {
         block_size: 4096,
         blocks: 1019,
     },
-    // From KORG's SDK (`alldata`); the factory sequences are empty (D26).
+    // From KORG's SDK (`alldata`); the factory sequences are empty.
     factory_samples: MemoryImage(sys::ALLDATA_FACTORY),
     no_samples: MemoryImage(sys::ALLDATA_EMPTY),
 };

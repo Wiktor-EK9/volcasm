@@ -1,4 +1,4 @@
-//! `samples/samples`: the sample slot index (`docs/vsj-format.md`, section 3).
+//! `samples/samples`: the sample slot index.
 
 use crate::{Error, check_marker, check_size};
 

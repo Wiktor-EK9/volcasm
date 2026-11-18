@@ -12,7 +12,7 @@ Linux, Windows and macOS *(UNTESTED)*.
 Free software under the GPL-3.0-or-later license.
 
 [![Written in Rust](https://img.shields.io/badge/Written%20in-Rust-red?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
-[![Runs on Linux · Windows · Macos](https://img.shields.io/badge/Runs%20on-Linux%20%C2%B7%20Windows%20%C2%B7%20Macos%20(maybe)-red?style=for-the-badge&logo=linux&logoColor=white)](https://github.com/Wiktor-EK9/volcasm)
+[![Runs on Linux · Windows · Macos](https://img.shields.io/badge/Runs%20on-Linux%20%C2%B7%20Windows%20%C2%B7%20Macos%20(untested)-red?style=for-the-badge&logo=linux&logoColor=white)](https://github.com/Wiktor-EK9/volcasm)
 [![License GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-red?style=for-the-badge)](LICENSE)
 
 </div>

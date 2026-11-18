@@ -13,7 +13,8 @@
 Sample and sequence manager for the first generation KORG Volca Sample, built in Rust.
 Volcasm keeps a library of 100 sample slots and 10 sequences on your computer, lets you edit them, and send your sample pack to the volca through the computer's audio output into the volca's SYNC IN jack.
 
-Linux, Windows and macOS. Free software under the GPL-3.0-or-later.
+Linux, Windows and macOS (UNTESTED). 
+Free software under the GPL-3.0-or-later license.
 
 Website: <https://volcasm.wmachalica.pl>
 
@@ -43,15 +44,15 @@ sequences cannot be read out. Keep your project file as the backup.
 Get the latest build from
 [Releases](https://github.com/Wiktor-EK9/volcasm/releases).
 
-- **Linux:** `volcasm-*-x86_64.AppImage`. Make it executable
-  (`chmod +x volcasm-*.AppImage`) and run it. Needs PipeWire and glibc 2.39
+- **Linux:** `volcasm-*-x86_64.AppImage`.
+- Needs PipeWire and glibc 2.39
   or newer (Ubuntu 24.04, Debian 13, Fedora 40 or newer). If it does not
   start, install `libfuse2` (or `fuse2`).
-- **Windows 10/11 (64-bit):** unpack the zip and run `volcasm.exe`. The
-  build is not signed, so SmartScreen may warn: "More info" → "Run anyway".
+- **Windows 10/11 (64-bit):** unpack the zip and run `volcasm.exe`.
 - **macOS 11 or newer:** unpack the zip and move `Volcasm.app` to
   Applications. The app is not signed by Apple: right-click → Open → Open
-  on the first start. Transfers on macOS have not been tested yet.
+  on the first start.
+  The macOS version has not been tested yet. Feel free to try it and let me know how it goes!
 
 ## Sending to the volca
 
@@ -71,7 +72,8 @@ Get the latest build from
 5. Press send in Volcasm. The volca shows the progress.
 
 `Err dcod` on the volca means the signal arrived altered: check the points
-above. More details for testers are in [docs/testers.md](docs/testers.md).
+above, make sure that any additional sound effects such as surround sound are turned off on your computer. 
+More details for testers are in [docs/testers.md](docs/testers.md).
 
 ## Building from source
 

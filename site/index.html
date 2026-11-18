@@ -69,8 +69,8 @@
       <article class="feature"><h3><span class="i" aria-hidden="true">&#xEA20;</span> Waveform editor</h3><p>Start and length handles, trim, normalize, pitch, replace, export and undo.</p></article>
       <article class="feature"><h3><span class="i" aria-hidden="true">&#xE9C4;</span> Memory budget</h3><p>Live duration and memory meters, measured on the hardware: about 66.8 s, 1019 blocks, 4 MB.</p></article>
       <article class="feature"><h3><span class="i" aria-hidden="true">&#xECBE;</span> Sequence editor</h3><p>10 sequences × 10 parts × 16 steps. Part flags, every parameter on a knob, motion data per step, active steps.</p></article>
-      <article class="feature"><h3><span class="i" aria-hidden="true">&#xE3D0;</span> Preview on the computer</h3><p>Play a sequence at any tempo before you send it. An approximation of the volca's own engine.</p></article>
-      <article class="feature"><h3><span class="i" aria-hidden="true">&#xE398;</span> Transfer over audio</h3><p>KORG's SYRO encoding for selected slots and sequences. 16-bit lossless, or down to 8-bit for about twice the speed.</p></article>
+      <article class="feature"><h3><span class="i" aria-hidden="true">&#xE3D0;</span> Preview on the computer</h3><p>Play a sequence at any tempo from 56 to 240 BPM before you send it. An approximation of the volca's own engine.</p></article>
+      <article class="feature"><h3><span class="i" aria-hidden="true">&#xE398;</span> Transfer over audio</h3><p>KORG's SYRO encoding for selected slots and sequences, with samples sent losslessly at 16 bits. The audio output is checked before anything is sent.</p></article>
       <article class="feature"><h3><span class="i" aria-hidden="true">&#xE326;</span> Sampler</h3><p>Record from any audio input straight into a slot, with silence trimmed off.</p></article>
       <article class="feature"><h3><span class="i" aria-hidden="true">&#xE760;</span> Factory reset</h3><p>Restore the KORG factory samples, or erase every sample on the volca.</p></article>
       <article class="feature"><h3><span class="i" aria-hidden="true">&#xE256;</span> Vosyr import</h3><p>Open Vosyr <code>.vsj</code> projects: samples, sequences, tempo, swing and reverb.</p></article>
@@ -103,7 +103,7 @@
           <p class="mk-cap">EDIT</p>
           <p class="mk-btns"><span class="mk-btn">TRIM</span><span class="mk-btn">NORMALIZE</span><span class="mk-btn">REPLACE</span></p>
           <p class="mk-title brand">transfer</p>
-          <p class="mk-small">24 CHECKED · QUALITY 16 BIT · LOSSLESS</p>
+          <p class="mk-small">24 CHECKED</p>
           <p class="mk-send"><span class="i">&#xE398;</span> SEND 24 ITEMS</p>
         </div>
       </div>
@@ -134,7 +134,7 @@
           <p class="mk-cap"><span class="i">&#xECBE;</span> ACTIVE STEP</p>
           <p class="mk-steps mk-steps--active" id="mk-active"></p>
           <p class="mk-title brand">transfer</p>
-          <p class="mk-small">SEQUENCES 1 · 4 · QUALITY 16 BIT · LOSSLESS</p>
+          <p class="mk-small">SEQUENCES 1 · 4</p>
           <p class="mk-send"><span class="i">&#xE398;</span> SEND 2 ITEMS</p>
         </div>
       </div>
@@ -200,7 +200,7 @@
     <div class="faq">
       <details><summary>Can Volcasm read samples back from the volca?</summary><p>No. The volca sample cannot send data: SYNC OUT is only a clock pulse. Your project file is the backup, so save it.</p></details>
       <details><summary>Which volca does it support?</summary><p>Only the first-generation KORG volca sample: 100 slots, 10 sequences, about 4 MB. The volca sample2 is not supported.</p></details>
-      <details><summary>The volca shows Err dcod. What now?</summary><p>Something on the audio path changed the signal. Set the output to 16-bit, 44.1 kHz, turn off equalizers and audio "enhancements", and set the volume to 100 %. Volcasm checks the output rate and refuses to send when the signal would be resampled.</p></details>
+      <details><summary>The volca shows Err dcod. What now?</summary><p>Something on the audio path changed the signal. Turn off equalizers, audio "enhancements" and spatial sound, set the volume to 100 %, and set the output to 16-bit, 44.1 kHz if you can. Volcasm checks the output before sending: on Windows it converts the signal to the output's rate itself, on Linux it tells you how to switch PipeWire to 44.1 kHz.</p></details>
       <details><summary>Do I need an interface or a special cable?</summary><p>No. A plain 3.5 mm stereo or mono cable from the headphone jack to SYNC IN is enough.</p></details>
       <details><summary>Is it safe to listen to the transfer?</summary><p>No. The signal is a loud, harsh noise. Never route it to speakers or headphones.</p></details>
       <details><summary>Is it related to KORG?</summary><p>No. Volcasm is an independent open-source project, not affiliated with or endorsed by KORG Inc. It uses the SYRO library that KORG published for this purpose.</p></details>

@@ -3,8 +3,9 @@
 <img src="volcasm-app/assets/icon.png" alt="Volcasm logo" width="160">
 
 <h1 align="center">Volcasm</h1>
+### The Volca Sample Manager
 
-Sample and sequence manager for the first generation KORG Volca Sample, built in Rust.
+Volcasm is a Sample and sequence manager for the first generation KORG Volca Sample, built in Rust.
 Volcasm keeps a library of 100 sample slots and 10 sequences on your computer, lets you edit them, and send your sample pack to the volca through the computer's audio output into the volca's SYNC IN jack.
 
 Linux, Windows and macOS *(UNTESTED)*. 

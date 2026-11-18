@@ -6,6 +6,8 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use crate::state::{LOSSLESS_BITS, MIN_TRANSFER_BITS};
+
 /// Interface theme chosen by the user.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -38,10 +40,17 @@ pub struct Settings {
     /// The first-start window (theme, memory unit, updates) was answered.
     #[serde(default)]
     pub welcome_done: bool,
+    /// Bits samples are sent with (8-16); 16 is lossless.
+    #[serde(default = "lossless")]
+    pub transfer_bits: u32,
 }
 
 fn yes() -> bool {
     true
+}
+
+fn lossless() -> u32 {
+    LOSSLESS_BITS
 }
 
 impl Default for Settings {
@@ -51,6 +60,7 @@ impl Default for Settings {
             memory_unit: MemoryUnit::default(),
             check_updates: true,
             welcome_done: false,
+            transfer_bits: LOSSLESS_BITS,
         }
     }
 }
@@ -71,8 +81,17 @@ impl Settings {
     pub fn load() -> Self {
         path()
             .and_then(|p| std::fs::read(p).ok())
-            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+            .and_then(|bytes| Self::parse(&bytes))
             .unwrap_or_default()
+    }
+
+    /// Reads the JSON; values outside their range are brought into it.
+    fn parse(json: &[u8]) -> Option<Self> {
+        let mut settings: Self = serde_json::from_slice(json).ok()?;
+        settings.transfer_bits = settings
+            .transfer_bits
+            .clamp(MIN_TRANSFER_BITS, LOSSLESS_BITS);
+        Some(settings)
     }
 
     pub fn save(&self) -> Result<(), String> {
@@ -164,11 +183,27 @@ mod tests {
             memory_unit: MemoryUnit::Mb,
             check_updates: false,
             welcome_done: true,
+            transfer_bits: 12,
         };
         let json = serde_json::to_string(&s).unwrap();
         assert_eq!(
             json,
-            r#"{"theme":"light","memory_unit":"mb","check_updates":false,"welcome_done":true}"#
+            r#"{"theme":"light","memory_unit":"mb","check_updates":false,"welcome_done":true,"transfer_bits":12}"#
+        );
+        // Files written before the transfer quality existed send lossless;
+        // values out of range are brought into it.
+        assert_eq!(Settings::parse(b"{}").unwrap().transfer_bits, 16);
+        assert_eq!(
+            Settings::parse(br#"{"transfer_bits":3}"#)
+                .unwrap()
+                .transfer_bits,
+            8
+        );
+        assert_eq!(
+            Settings::parse(br#"{"transfer_bits":24}"#)
+                .unwrap()
+                .transfer_bits,
+            16
         );
         // Files written before the first-start window existed show it once.
         assert!(

@@ -177,6 +177,7 @@ impl VolcasmApp {
             },
         }
         let welcome_open = options.welcome || !settings.welcome_done;
+        let transfer_bits = settings.transfer_bits;
         let mut app = Self {
             state: AppState::default(),
             messages: Vec::new(),
@@ -210,6 +211,7 @@ impl VolcasmApp {
             allow_close: false,
             title: String::new(),
         };
+        app.state.transfer.bits = transfer_bits;
         if let Some(path) = options.open {
             app.open_any(&path);
         }
@@ -542,6 +544,17 @@ impl VolcasmApp {
                 )),
             }
         }
+        let bits = self.state.transfer.bits;
+        if bits < crate::state::LOSSLESS_BITS
+            && targets.iter().any(|t| matches!(t, Target::Sample(_)))
+        {
+            lines.push((
+                true,
+                style::caps(&format!(
+                    "Samples sent at {bits} bit: shorter transfer, lower quality on the volca."
+                )),
+            ));
+        }
         if !erased.is_empty() {
             lines.push((
                 false,
@@ -580,7 +593,7 @@ impl VolcasmApp {
         self.transfer_dialog = Some(self.transfer_summary(&targets));
         self.report.clear();
         let project = self.state.project.clone();
-        let bits = Some(crate::state::TRANSFER_BITS);
+        let bits = Some(self.state.transfer.bits);
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || {
             let result = project
@@ -1417,6 +1430,11 @@ impl eframe::App for VolcasmApp {
             // No saved choice and the window system reports the theme:
             // follow it as it changes.
             style::sync_theme(&ctx);
+        }
+        if self.state.transfer.bits != self.settings.transfer_bits {
+            // Chosen in the transfer panel: remember it.
+            self.settings.transfer_bits = self.state.transfer.bits;
+            self.save_settings();
         }
         self.poll_imports();
         self.poll_update_check();

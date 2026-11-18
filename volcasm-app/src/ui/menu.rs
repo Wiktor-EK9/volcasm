@@ -433,7 +433,7 @@ pub fn welcome_dialog(
 }
 
 const GITHUB: &str = "https://github.com/Wiktor-EK9/volcasm";
-const WEBSITE: &str = "https://volcasm.wmachalica.pl";
+const WEBSITE: &str = "https://wiktor-ek9.github.io/volcasm/";
 
 /// Program name, version, author and links. Returns true when the
 /// CREDITS button is clicked.

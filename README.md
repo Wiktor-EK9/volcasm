@@ -18,6 +18,15 @@ Free software under the GPL-3.0-or-later license.
 
 ---
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/samples.png" alt="Volcasm: the 100 sample slots and the transfer panel" width="100%">
+</p>
+<p align="center">
+  <img src="docs/screenshots/sequences.png" alt="Volcasm: the sequence editor with 10 parts and 16 steps" width="100%">
+</p>
+
 ## Features
 
 - **Sample library:** 100 slots with a memory meter for the volca's ~4 MB.

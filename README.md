@@ -1,13 +1,23 @@
-# Volcasm
+<div align="center">
 
-Sample and sequence manager for the **KORG volca sample** (first
-generation). Volcasm keeps a library of 100 sample slots and 10 sequences on
-your computer, lets you edit them, and sends them to the volca through the
-computer's audio output into the volca's SYNC IN jack.
+<img src="volcasm-app/assets/icon.png" alt="Volcasm logo" width="160">
 
-Linux, Windows and macOS. Free software under the GPL-3.0-or-later.
+<h1 align="center">Volcasm</h1>
 
-Website: <https://volcasm.wmachalica.pl>
+Sample and sequence manager for the first generation KORG Volca Sample, built in Rust.
+Volcasm keeps a library of 100 sample slots and 10 sequences on your computer, lets you edit them, and send your sample pack to the volca through the computer's audio output into the volca's SYNC IN jack.
+
+Linux, Windows and macOS *(UNTESTED)*. 
+
+Free software under the GPL-3.0-or-later license.
+
+[![Written in Rust](https://img.shields.io/badge/Written%20in-Rust-red?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
+[![Runs on Linux · Windows · Macos](https://img.shields.io/badge/Runs%20on-Linux%20%C2%B7%20Windows%20%C2%B7%20Macos%20(untested)-red?style=for-the-badge&logo=linux&logoColor=white)](https://github.com/Wiktor-EK9/volcasm)
+[![License GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-red?style=for-the-badge)](LICENSE)
+
+</div>
+
+---
 
 ## Features
 
@@ -27,23 +37,25 @@ Website: <https://volcasm.wmachalica.pl>
   (`.vsj`) can be imported.
 - **Updates:** optional check for a new version at start.
 
-The volca cannot send anything back to the computer: its samples and
-sequences cannot be read out. Keep your project file as the backup.
+*The volca cannot send anything back to the computer: its samples and
+sequences cannot be read out. Keep your project file as the backup.*
 
 ## Download
 
 Get the latest build from
 [Releases](https://github.com/Wiktor-EK9/volcasm/releases).
 
-- **Linux:** `volcasm-*-x86_64.AppImage`. Make it executable
-  (`chmod +x volcasm-*.AppImage`) and run it. Needs PipeWire and glibc 2.39
-  or newer (Ubuntu 24.04, Debian 13, Fedora 40 or newer). If it does not
-  start, install `libfuse2` (or `fuse2`).
-- **Windows 10/11 (64-bit):** unpack the zip and run `volcasm.exe`. The
-  build is not signed, so SmartScreen may warn: "More info" → "Run anyway".
+- **Linux:** `volcasm-*-x86_64.AppImage`.
+  Needs PipeWire and glibc 2.39 or newer (Ubuntu 24.04, Debian 13, Fedora 40 or newer).
+  If it does not start, install `libfuse2` (or `fuse2`).
+  
+- **Windows 10/11 (64-bit):** unpack the zip and run `volcasm.exe`.
+  
 - **macOS 11 or newer:** unpack the zip and move `Volcasm.app` to
   Applications. The app is not signed by Apple: right-click → Open → Open
-  on the first start. Transfers on macOS have not been tested yet.
+  on the first start.
+  
+  *The macOS version has not been tested yet. Feel free to try it and let me know how it goes!*
 
 ## Sending to the volca
 
@@ -63,7 +75,8 @@ Get the latest build from
 5. Press send in Volcasm. The volca shows the progress.
 
 `Err dcod` on the volca means the signal arrived altered: check the points
-above. More details for testers are in [docs/testers.md](docs/testers.md).
+above and **make sure that any additional sound effects or enhancements such as surround sound are turned off on your computer.** 
+More details for testers are in [docs/testers.md](docs/testers.md).
 
 ## Building from source
 

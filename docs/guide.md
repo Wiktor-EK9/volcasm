@@ -87,6 +87,14 @@ stream to that rate itself and shows a warning. If the volca shows
 Volcasm sees the format (point 1) but cannot see enhancements or the
 volume, so check points 2 and 3 yourself.
 
+## Transfer quality
+
+The transfer panel has a Quality list. **16 bit** (the default) is
+lossless. Lower settings, down to **8 bit**, quantize the samples: the
+transfer gets shorter (about half as long at 8 bits) and the samples sound
+rougher on the volca.
+Restoring factory samples and erasing always use 16 bits.
+
 ## Factory reset
 
 Menu → Volca → "Restore factory samples…" sends KORG's factory samples to

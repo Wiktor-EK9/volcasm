@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1]
+
+- Transfer quality: the transfer panel has a Quality list, from 16 bit
+  (lossless, the default) down to 8 bit. Below 16 bits samples are
+  quantized and the transfer is shorter, about half as long at 8 bits. The
+  choice is remembered. Restoring factory samples and erasing stay at
+  16 bits.
+
 ## [0.2.0]
 
 First public release.

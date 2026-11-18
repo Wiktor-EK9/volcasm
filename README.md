@@ -39,8 +39,10 @@ Free software under the GPL-3.0-or-later license.
   (motion, loop, reverb, reverse, mute) and motion data.
 - **Preview:** play samples and sequences on the computer before sending.
 - **Transfer:** send selected slots and sequences, restore KORG's factory
-  samples or erase all samples. Before sending, Volcasm checks the audio
-  output, because the transfer signal breaks if it is altered on the way.
+  samples or erase all samples. Samples go lossless at 16 bits, or down to
+  8 bits for a transfer about twice as short (lower quality on the volca).
+  Before sending, Volcasm checks the audio output, because the transfer
+  signal breaks if it is altered on the way.
 - **Projects:** everything is saved in one `.volcasm` file. Vosyr projects
   (`.vsj`) can be imported.
 - **Updates:** optional check for a new version at start.

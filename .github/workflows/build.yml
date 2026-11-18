@@ -76,7 +76,12 @@ jobs:
   macos:
     # Apple Silicon runner; the x86_64 binary is cross-compiled and both are
     # joined into one universal Volcasm.app. Tests run on arm64 only.
+    # GitHub's macOS arm64 runners are sometimes not available ("not
+    # acquired by Runner"), so a release does not wait for this job: re-run
+    # it later and it adds its package to the existing release.
     runs-on: macos-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -97,12 +102,33 @@ jobs:
         with:
           name: volcasm-macos-universal
           path: dist/
+      - name: Add to the release if it was published without macOS
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$GITHUB_REF_NAME
+          if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "no release yet; the release job includes this package"
+            exit 0
+          fi
+          cd dist
+          zip=$(ls *.zip)
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" -p SHA256SUMS -D .
+          { grep -v " $zip\$" SHA256SUMS || true; shasum -a 256 "$zip"; } > SHA256SUMS.new
+          mv SHA256SUMS.new SHA256SUMS
+          cat SHA256SUMS
+          gh release upload "$tag" --repo "$GITHUB_REPOSITORY" --clobber "$zip" SHA256SUMS
 
   release:
     # A tag `vX.Y.Z` publishes the packages and their SHA-256 sums. A tag
     # with a suffix (`v0.2.0-rc1`) makes a pre-release, which the update
-    # check does not see.
-    if: startsWith(github.ref, 'refs/tags/v')
+    # check does not see. Runs once Linux and Windows are built, whether or
+    # not a macOS runner was available (the macOS job can add its package
+    # later).
+    if: >-
+      always() && startsWith(github.ref, 'refs/tags/v')
+      && needs.linux.result == 'success' && needs.windows.result == 'success'
     needs: [linux, windows, macos]
     runs-on: ubuntu-24.04
     permissions:

@@ -1,4 +1,4 @@
-//! The `.volcasm` project file (D8): a ZIP archive with `manifest.json`,
+//! The `.volcasm` project file: a ZIP archive with `manifest.json`,
 //! `samples/NN.wav` (16-bit mono, device rate) and `patterns/NN.bin` (raw
 //! 2624-byte SDK pattern structures).
 

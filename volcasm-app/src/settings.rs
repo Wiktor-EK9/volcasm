@@ -32,7 +32,7 @@ pub struct Settings {
     pub theme: Option<Theme>,
     #[serde(default)]
     pub memory_unit: MemoryUnit,
-    /// Look for a new version at start (D25).
+    /// Look for a new version at start.
     #[serde(default = "yes")]
     pub check_updates: bool,
     /// The first-start window (theme, memory unit, updates) was answered.

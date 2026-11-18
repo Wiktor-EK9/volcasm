@@ -8,7 +8,7 @@
 //! linked, so all checks happen during the pre-roll. On other systems the
 //! stream is resampled to the device mix rate when it is not 44.1 kHz (with
 //! a warning), so that the system does not convert it, and the mix rate is
-//! checked again during the pre-roll and after the data (D23).
+//! checked again during the pre-roll and after the data.
 
 use std::fmt;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, AtomicUsize, Ordering};
@@ -324,14 +324,14 @@ fn run(
 
 /// Rate of the stream sent to `device`. On Linux always 44.1 kHz: the
 /// PipeWire graph is checked and its resampling is accepted only on devices
-/// without 44.1 kHz (D18).
+/// without 44.1 kHz.
 #[cfg(target_os = "linux")]
 fn output_rate(_device: &cpal::Device) -> Result<u32, TransferError> {
     Ok(check::STREAM_RATE)
 }
 
 /// Rate of the stream sent to `device`: the shared-mode mix rate, so that
-/// WASAPI does not convert the stream (D23).
+/// WASAPI does not convert the stream.
 #[cfg(not(target_os = "linux"))]
 fn output_rate(device: &cpal::Device) -> Result<u32, TransferError> {
     Ok(device.default_output_config()?.sample_rate())

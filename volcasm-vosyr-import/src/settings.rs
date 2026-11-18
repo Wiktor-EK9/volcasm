@@ -1,4 +1,4 @@
-//! Global settings in the `.vsj` file (`docs/vsj-format.md`, section 5).
+//! Global settings in the `.vsj` file.
 //!
 //! Layout, recognized from 25 projects:
 //! ```text

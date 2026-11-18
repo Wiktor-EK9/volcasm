@@ -7,11 +7,11 @@ license.workspace = true
 
 [dependencies]
 cpal = "0.18.2"
-# Resampling of the stream for outputs not at 44.1 kHz (Windows, D23).
+# Resampling of the stream for outputs not at 44.1 kHz (Windows).
 volcasm-core = { path = "../volcasm-core" }
 
-# PipeWire: the transfer checks its graph (D18). Other systems use cpal's
-# default host (WASAPI on Windows, D23).
+# PipeWire: the transfer checks its graph. Other systems use cpal's default
+# host (WASAPI on Windows).
 [target.'cfg(target_os = "linux")'.dependencies]
 cpal = { version = "0.18.2", features = ["pipewire"] }
 pipewire = "0.10"

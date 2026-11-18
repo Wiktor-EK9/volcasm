@@ -6,7 +6,7 @@
 # both targets.
 #
 # The bundle is signed ad hoc only (no Developer ID): Gatekeeper blocks the
-# first start until the user allows it (docs/testers.md).
+# first start until the user allows it (docs/guide.md).
 set -eu
 version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
 app=target/Volcasm.app

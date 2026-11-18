@@ -1,7 +1,7 @@
-# Test builds for Linux (AppImage), Windows (zip) and macOS (zipped .app),
-# D23. Started by hand (Actions -> build -> Run workflow) or by pushing a
-# `v*` tag. The packages are uploaded as workflow artifacts; a tag also
-# publishes them as a GitHub release, which the update check reads (D25).
+# Builds for Linux (AppImage), Windows (zip) and macOS (zipped .app).
+# Started by hand (Actions -> build -> Run workflow) or by pushing a `v*`
+# tag. The packages are uploaded as workflow artifacts; a tag also
+# publishes them as a GitHub release, which the update check reads.
 name: build
 
 on:
@@ -37,7 +37,7 @@ jobs:
           echo "46fdd785094c7f6e545b61afcfb0f3d98d8eab243f644b4b17698c01d06083d1  appimagetool" | sha256sum -c
           chmod +x appimagetool
           APPIMAGE_EXTRACT_AND_RUN=1 APPIMAGETOOL=./appimagetool packaging/appimage.sh
-          cp docs/testers.md dist/README.md
+          cp docs/guide.md dist/README.md
       - uses: actions/upload-artifact@v4
         with:
           name: volcasm-linux-x86_64
@@ -63,7 +63,7 @@ jobs:
           dir=dist/volcasm-$version-windows-x64
           mkdir -p "$dir"
           cp target/release/volcasm.exe "$dir/"
-          cp docs/testers.md "$dir/README.md"
+          cp docs/guide.md "$dir/README.md"
           packaging/licenses.sh "$dir/licenses"
           # The zip is what a release ships and what the updater unpacks.
           (cd dist && 7z a -tzip "volcasm-$version-windows-x64.zip" "volcasm-$version-windows-x64")
@@ -92,7 +92,7 @@ jobs:
       - name: Build app bundle
         run: |
           sh packaging/macos.sh
-          cp docs/testers.md dist/README.md
+          cp docs/guide.md dist/README.md
       - uses: actions/upload-artifact@v4
         with:
           name: volcasm-macos-universal

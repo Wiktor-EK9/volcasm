@@ -75,7 +75,7 @@ pub const PARTS: usize = 10;
 
 /// Values Vosyr and the KORG presets store in fields the SDK calls
 /// `Reserved` and `Padding1` (identical in all 120 fixture sequences and
-/// in the presets); meaning unknown (`docs/vsj-format.md`, section 4).
+/// in the presets); meaning unknown.
 const FACTORY_RESERVED: [u8; 2] = [0xff, 0x00];
 const FACTORY_PADDING1: [u8; 22] = [
     0x7f, 0xff, 0xff, 0xff, 0xf7, 0xff, 0xff, 0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
@@ -328,7 +328,7 @@ mod tests {
 
     #[test]
     fn speed_modes_match_hardware_test() {
-        // Bytes from the t3_speed hardware test (docs/vsj-format.md).
+        // Bytes from a hardware test of the SPEED encoding.
         let mut pattern = Pattern::default();
         let p = pattern.part_mut(0);
         p.set_speed(Speed::Semitones(12)).unwrap();
@@ -342,7 +342,7 @@ mod tests {
 
     #[test]
     fn bit7_is_ignored_on_read() {
-        // Raw VolcaSample_Pattern_Init PAN 0x7f plays right +63 (t2_bit7).
+        // Raw VolcaSample_Pattern_Init PAN 0x7f plays right +63 (hardware test).
         let mut pattern = Pattern::default();
         pattern.part_mut(0).data_mut().Param[1] = 0x7f;
         assert_eq!(pattern.part(0).param(Param::Pan), 63);

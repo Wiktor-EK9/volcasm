@@ -2,8 +2,8 @@
 //!
 //! Output goes through cpal: PipeWire on Linux, WASAPI on Windows. Before
 //! any SYRO data is sent, the audio path is checked so that the stream is
-//! not altered on the way (D4, D18). On Windows a device mix rate other
-//! than 44.1 kHz is handled by resampling the stream in Volcasm (D23).
+//! not altered on the way. On Windows a device mix rate other than
+//! 44.1 kHz is handled by resampling the stream in Volcasm.
 
 pub mod check;
 pub mod graph;

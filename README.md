@@ -76,7 +76,7 @@ Get the latest build from
 
 `Err dcod` on the volca means the signal arrived altered: check the points
 above and **make sure that any additional sound effects or enhancements such as surround sound are turned off on your computer.** 
-More details for testers are in [docs/testers.md](docs/testers.md).
+More details are in the [user guide](docs/guide.md).
 
 ## Building from source
 
@@ -116,9 +116,9 @@ Packaging (`packaging/*.sh`) also needs
 | `volcasm-vosyr-import` | loader for Vosyr `.vsj` projects |
 | `volcasm-app` | the GUI (egui / eframe), binary `volcasm` |
 
-`docs/vsj-format.md` describes the Vosyr project format as worked out from
-test projects (clean-room: no Vosyr code was used). `docs/hardware.md` has
-notes from tests on the device.
+The Vosyr import was written clean-room, from test projects saved by Vosyr
+and its screenshots only; no Vosyr code was used. Test data is in
+`tests/fixtures/`.
 
 ## License and credits
 

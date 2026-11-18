@@ -220,8 +220,7 @@ pub fn verify(
         if device_format.rate != STREAM_RATE {
             if device.supports_rate(STREAM_RATE) == Some(false) {
                 // The hardware cannot run at 44.1 kHz at all, so resampling
-                // is unavoidable. SYRO transfers survived it on hardware
-                // (docs/hardware.md, section 3).
+                // is unavoidable. SYRO transfers survived it on hardware.
                 warnings.push(Warning::Resampled {
                     device: device_name.clone(),
                     rate: device_format.rate,

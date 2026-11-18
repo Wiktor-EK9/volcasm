@@ -698,7 +698,7 @@ impl VolcasmApp {
         match transfer.wait() {
             Ok(report) => {
                 // Resampling on a 48 kHz-only device is expected and works
-                // (D18), so it is not shown.
+                // (tested on hardware), so it is not shown.
                 for warning in &report.warnings {
                     if !matches!(warning, volcasm_audio::check::Warning::Resampled { .. }) {
                         self.report.push((false, warning.to_string()));

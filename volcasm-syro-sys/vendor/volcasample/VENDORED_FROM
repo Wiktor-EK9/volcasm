@@ -4,7 +4,7 @@ alldata/: all_sample_empty.alldata, sample_preset_namelist.txt and (since
 2026-11-07, factory reset) all_sample_preset.alldata, unchanged
 (git blob bf2aac8b3323fb17470e694eee663d3c6decbb6f, 3 932 160 B).
 
-Local changes (D24), each also in volcasm-syro-sys/patches/:
+Local changes, each also in volcasm-syro-sys/patches/:
 - 0001-comp-bitbase-bounds.patch: syro/korg_syro_comp.c, SyroComp_CompBlock
   read pBitBase[4] (one past the end) after the 4th bit base; the result
   depended on stack contents. Bounds check added.

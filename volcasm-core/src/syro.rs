@@ -238,7 +238,7 @@ impl fmt::Display for ResampleError {
 impl std::error::Error for ResampleError {}
 
 /// Converts a stream from [`encode`] (stereo, [`STREAM_SAMPLE_RATE`]) to
-/// `rate`, for outputs whose shared mixer runs at another rate (D23): the
+/// `rate`, for outputs whose shared mixer runs at another rate: the
 /// conversion is done here with a known resampler instead of by the system.
 ///
 /// rubato's synchronous FFT resampler, processed in chunks so that long

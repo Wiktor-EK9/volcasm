@@ -15,7 +15,7 @@ use crate::syro::SyroItem;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Slot {
     pub name: String,
-    /// Always 16-bit mono at the device rate (D11).
+    /// Always 16-bit mono at the device rate.
     pub sample: Sample,
 }
 
@@ -83,7 +83,7 @@ impl std::error::Error for ProjectError {}
 /// Tempo of a new project and of files without a tempo, in BPM.
 pub const DEFAULT_TEMPO: u16 = 120;
 /// Tempo range in BPM: the limits of the volca sample (56-240, also
-/// Vosyr's limits, `docs/vsj-format.md` section 5).
+/// Vosyr's limits).
 pub const TEMPO_RANGE: std::ops::RangeInclusive<u16> = 56..=240;
 
 /// Sample slots and patterns for one device.

@@ -2,7 +2,7 @@
 //!
 //! Samples are stored in fixed-size blocks: each non-empty sample takes
 //! `ceil(bytes / block_size)` blocks, with no other per-sample cost. This
-//! model was measured on hardware (`docs/hardware.md`).
+//! model was measured on hardware.
 
 /// Block-based sample memory of a device.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -75,7 +75,7 @@ mod tests {
         assert_eq!(LAYOUT.blocks_for(2049), 2);
     }
 
-    /// Hardware memory test (2026-10-13), see `docs/hardware.md`. Read
+    /// Hardware memory test (2026-10-13). Read
     /// conservatively: the last slot shown on the display is taken as the
     /// first one that did not fit.
     #[test]

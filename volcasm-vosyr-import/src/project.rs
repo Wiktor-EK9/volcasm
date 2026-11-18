@@ -25,7 +25,7 @@ pub struct VosyrProject {
     pub dir: PathBuf,
     /// Project name (`.vsj` file stem).
     pub name: String,
-    /// The `.vsj` file as read (`docs/vsj-format.md`, section 5).
+    /// The `.vsj` file as read.
     pub vsj: Vec<u8>,
     pub index: SampleIndex,
     /// Sequences 1-10 (`sequence01..10`), validated SDK pattern structures.

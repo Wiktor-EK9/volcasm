@@ -2,7 +2,7 @@
 //!
 //! Usage: syro_wav [--rate <hz>] <out.wav> <item>...
 //!   --rate <hz>                 resample the stream to <hz> as Volcasm does
-//!                               for outputs not at 44.1 kHz (D23)
+//!                               for outputs not at 44.1 kHz
 //!   s<slot>:<file.wav>          sample (16-bit mono WAV), slot 0-99
 //!   s<slot>c<bits>:<file.wav>   compressed sample, bits 8-16
 //!   e<slot>                     erase sample slot
@@ -10,7 +10,7 @@
 //!   a:<file.alldata>            whole sample memory (replaces all samples)
 //!   ac<bits>:<file.alldata>     same, compressed (bits 8-16)
 //!
-//! Input samples are not converted (that is stage 4): the WAV must already be
+//! Input samples are not converted (see `import_sample`): the WAV must already be
 //! 16-bit mono; its sample rate is passed to SYRO as is.
 
 use std::error::Error;

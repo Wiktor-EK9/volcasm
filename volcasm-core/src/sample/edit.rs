@@ -1,4 +1,4 @@
-//! Edits on samples already in the device format (D11).
+//! Edits on samples already in the device format.
 
 use std::fmt;
 use std::ops::Range;

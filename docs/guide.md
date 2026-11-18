@@ -1,10 +1,10 @@
-# Volcasm – test build
+# Volcasm – user guide
 
 Volcasm manages the samples and sequences of a KORG volca sample (first
 generation) and sends them to it through the computer's audio output.
 
-This is a test build. Please report what works, what does not, and the exact
-messages you see.
+Problems and ideas: <https://github.com/Wiktor-EK9/volcasm/issues>. Please
+include the exact messages you see.
 
 ## Running it
 
@@ -23,7 +23,10 @@ If it does not start, install `libfuse2` (or `fuse2`), or run it with
 
 1. Unpack the zip.
 2. Run `volcasm.exe`. The build is not signed, so SmartScreen may warn about
-   an unknown publisher: click "More info" → "Run anyway".
+   an unknown publisher: click "More info" → "Run anyway". On Windows 11
+   with Smart App Control turned on, unsigned programs are blocked without
+   that option; it can be turned off in Windows Security → App & browser
+   control → Smart App Control settings.
 
 ### macOS (11 or newer, Intel or Apple Silicon)
 
@@ -69,9 +72,8 @@ and, after the transfer, `pw-metadata -n settings 0 clock.force-rate 0`.
 ### Windows
 
 If the output runs at another rate (often 48000 Hz), Volcasm converts the
-stream to that rate itself and shows a warning. This should work, but it is
-not yet confirmed on Windows hardware: if the volca shows `Err dcod`, set
-the format to 44.1 kHz as in point 1 and try again.
+stream to that rate itself and shows a warning. If the volca shows
+`Err dcod`, set the format to 44.1 kHz as in point 1 and try again.
 
 1. Settings → System → Sound → your output device (e.g. Speakers or
    Headphones) → Output settings → Format: **16 bit, 44100 Hz (CD Quality)**.
@@ -83,7 +85,7 @@ the format to 44.1 kHz as in point 1 and try again.
 3. Set the device volume to 100%.
 
 Volcasm sees the format (point 1) but cannot see enhancements or the
-volume, so please check points 2 and 3 yourself.
+volume, so check points 2 and 3 yourself.
 
 ## Factory reset
 

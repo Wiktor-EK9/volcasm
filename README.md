@@ -44,12 +44,10 @@ Get the latest build from
 [Releases](https://github.com/Wiktor-EK9/volcasm/releases).
 
 - **Linux:** `volcasm-*-x86_64.AppImage`.
-  Needs PipeWire and glibc 2.39
-  or newer (Ubuntu 24.04, Debian 13, Fedora 40 or newer).
+  Needs PipeWire and glibc 2.39 or newer (Ubuntu 24.04, Debian 13, Fedora 40 or newer).
   If it does not start, install `libfuse2` (or `fuse2`).
   
-- **Windows 10/11 (64-bit):** 
-unpack the zip and run `volcasm.exe`.
+- **Windows 10/11 (64-bit):** unpack the zip and run `volcasm.exe`.
   
 - **macOS 11 or newer:** unpack the zip and move `Volcasm.app` to
   Applications. The app is not signed by Apple: right-click → Open → Open

@@ -2,10 +2,18 @@
 # Started by hand (Actions -> build -> Run workflow) or by pushing a `v*`
 # tag. The packages are uploaded as workflow artifacts; a tag also
 # publishes them as a GitHub release, which the update check reads.
+# Started by hand on main with "release" ticked, the run creates the tag
+# `v<version from Cargo.toml>` itself and publishes the release (no local
+# git needed, e.g. from a phone).
 name: build
 
 on:
   workflow_dispatch:
+    inputs:
+      release:
+        description: Publish a release, tagging this commit v<version from Cargo.toml>
+        type: boolean
+        default: false
   push:
     tags: ["v*"]
 
@@ -125,9 +133,14 @@ jobs:
     # with a suffix (`v0.2.0-rc1`) makes a pre-release, which the update
     # check does not see. Runs once Linux and Windows are built, whether or
     # not a macOS runner was available (the macOS job can add its package
-    # later).
+    # later). Started by hand with "release", it tags the commit it built
+    # (`gh release create --target`); a tag pushed with the workflow token
+    # starts no new run, so this run publishes everything.
     if: >-
-      always() && startsWith(github.ref, 'refs/tags/v')
+      always()
+      && (startsWith(github.ref, 'refs/tags/v')
+          || (github.event_name == 'workflow_dispatch' && inputs.release
+              && github.ref == 'refs/heads/main'))
       && needs.linux.result == 'success' && needs.windows.result == 'success'
     needs: [linux, windows, macos]
     runs-on: ubuntu-24.04
@@ -143,11 +156,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag=$GITHUB_REF_NAME
           version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
-          flags=""
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            tag=v$version
+          else
+            tag=$GITHUB_REF_NAME
+          fi
+          flags="--target $GITHUB_SHA"
           case "$tag" in
-            *-*) flags="--prerelease" ;;
+            *-*) flags="$flags --prerelease" ;;
             "v$version") ;;
             *) echo "tag $tag does not match version $version in Cargo.toml"; exit 1 ;;
           esac

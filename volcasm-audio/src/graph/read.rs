@@ -20,7 +20,9 @@ use spa::pod::deserialize::PodDeserializer;
 use spa::pod::{ChoiceValue, Pod, Value, ValueArray};
 use spa::utils::{Choice, ChoiceEnum};
 
-use super::{ClockSettings, GraphError, GraphSnapshot, NodeState, RateRange, RawFormat, Volumes};
+use super::{
+    ClockSettings, GraphError, GraphSnapshot, Link, NodeState, RateRange, RawFormat, Volumes,
+};
 
 impl From<pw::Error> for GraphError {
     fn from(err: pw::Error) -> Self {
@@ -32,6 +34,7 @@ impl From<pw::Error> for GraphError {
 struct Collected {
     clock: ClockSettings,
     nodes: HashMap<u32, NodeState>,
+    links: Vec<Link>,
 }
 
 /// Takes a snapshot of the PipeWire graph. Blocks until PipeWire has answered
@@ -100,6 +103,23 @@ pub fn snapshot() -> Result<GraphSnapshot, GraphError> {
                             })
                             .register();
                         keep_alive.borrow_mut().push(Box::new((metadata, listener)));
+                    }
+                    ObjectType::Link => {
+                        // Needs no binding: the nodes are in the global's
+                        // properties. Used to find the device of a stream
+                        // when PipeWire (before 1.2) does not set
+                        // `node.driver-id`.
+                        let node =
+                            |key| props.and_then(|p| p.get(key)).and_then(|v| v.parse().ok());
+                        if let (Some(output_node), Some(input_node)) =
+                            (node("link.output.node"), node("link.input.node"))
+                        {
+                            collected.borrow_mut().links.push(Link {
+                                output_node,
+                                input_node,
+                            });
+                        }
+                        return;
                     }
                     ObjectType::Node => {
                         let is_audio = props
@@ -190,6 +210,7 @@ pub fn snapshot() -> Result<GraphSnapshot, GraphError> {
     Ok(GraphSnapshot {
         clock: collected.clock,
         nodes,
+        links: collected.links,
     })
 }
 

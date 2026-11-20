@@ -88,16 +88,40 @@ impl NodeState {
     }
 }
 
+/// A link from an output port of one node to an input port of another (one
+/// per channel).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Link {
+    pub output_node: u32,
+    pub input_node: u32,
+}
+
 /// Audio part of the PipeWire graph at one moment.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct GraphSnapshot {
     pub clock: ClockSettings,
     pub nodes: Vec<NodeState>,
+    pub links: Vec<Link>,
 }
 
 impl GraphSnapshot {
     pub fn node(&self, id: u32) -> Option<&NodeState> {
         self.nodes.iter().find(|node| node.id == id)
+    }
+
+    /// Nodes that `id` sends to, in link order, without repeats.
+    pub fn linked_to(&self, id: u32) -> impl Iterator<Item = &NodeState> {
+        let mut seen = Vec::new();
+        self.links
+            .iter()
+            .filter(move |link| link.output_node == id)
+            .map(|link| link.input_node)
+            .filter(move |&node| {
+                let new = !seen.contains(&node);
+                seen.push(node);
+                new
+            })
+            .filter_map(|node| self.node(node))
     }
 }
 

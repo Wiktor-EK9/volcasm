@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.2]
+
+- Linux: transfers work with PipeWire older than 1.2 (Ubuntu 24.04, Linux
+  Mint 22 and other distributions based on them). Every transfer was
+  refused with "the output stream is not connected to a device": the output
+  check found the device only through a property that these PipeWire
+  versions do not set. It now also follows the stream's links to the
+  device.
+
 ## [0.2.1]
 
 - Transfer quality: the transfer panel has a Quality list, from 16 bit

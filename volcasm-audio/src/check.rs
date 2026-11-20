@@ -208,11 +208,7 @@ pub fn verify(
                 channels: format.channels,
             });
         }
-        let device = stream
-            .prop("node.driver-id")
-            .and_then(|id| id.parse().ok())
-            .and_then(|id| snapshot.node(id))
-            .ok_or(Problem::NotConnected)?;
+        let device = device_of(snapshot, stream).ok_or(Problem::NotConnected)?;
         let device_name = node_name(device);
         let device_format = device.format.ok_or_else(|| Problem::FormatUnknown {
             node: device_name.clone(),
@@ -237,6 +233,21 @@ pub fn verify(
         check_volumes(device, &device_name, true, &mut warnings)?;
     }
     Ok(warnings)
+}
+
+/// The device `stream` plays to: its driver (`node.driver-id`, set by
+/// PipeWire 1.2 and newer), or else the sink its ports are linked to.
+fn device_of<'a>(snapshot: &'a GraphSnapshot, stream: &NodeState) -> Option<&'a NodeState> {
+    let driver = stream
+        .prop("node.driver-id")
+        .and_then(|id| id.parse().ok())
+        .and_then(|id| snapshot.node(id));
+    driver.or_else(|| {
+        snapshot.linked_to(stream.id).find(|node| {
+            node.prop("media.class")
+                .is_some_and(|class| class == "Audio/Sink" || class == "Audio/Duplex")
+        })
+    })
 }
 
 fn check_volumes(
@@ -284,7 +295,7 @@ fn node_name(node: &NodeState) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::{RateRange, RawFormat};
+    use crate::graph::{Link, RateRange, RawFormat};
 
     fn clock(rate: u32, allowed: &[u32], force: Option<u32>) -> ClockSettings {
         ClockSettings {
@@ -345,6 +356,7 @@ mod tests {
                     Some(STREAM_RATE),
                 ),
             ],
+            links: Vec::new(),
         }
     }
 
@@ -414,6 +426,44 @@ mod tests {
         g.nodes[1].props.remove("node.driver-id");
         assert_eq!(verify(&g, ours), Err(Problem::NotConnected));
         assert_eq!(verify(&g, |_| false), Err(Problem::StreamNotFound));
+    }
+
+    #[test]
+    fn device_found_by_links_without_driver_id() {
+        // PipeWire 1.0 (Ubuntu 24.04, Linux Mint 22) has no node.driver-id:
+        // the device is the sink the stream is linked to (issue #6).
+        let mut g = graph(Some(STREAM_RATE));
+        g.nodes[1].props.remove("node.driver-id");
+        g.nodes.push(node(
+            80,
+            &[("media.class", "Stream/Input/Audio")],
+            Some(STREAM_RATE),
+        ));
+        g.nodes[0].volumes = volumes(0.5, 1.0);
+        g.links = vec![
+            Link {
+                output_node: 91,
+                input_node: 80,
+            },
+            Link {
+                output_node: 91,
+                input_node: 76,
+            },
+            Link {
+                output_node: 91,
+                input_node: 76,
+            },
+        ];
+        assert_eq!(
+            verify(&g, ours),
+            Ok(vec![Warning::DeviceVolume {
+                device: "Speaker".into(),
+                volumes: vec![0.5; 2]
+            }])
+        );
+        // Linked only to something that is not a device: not connected.
+        g.links.retain(|link| link.input_node == 80);
+        assert_eq!(verify(&g, ours), Err(Problem::NotConnected));
     }
 
     #[test]
